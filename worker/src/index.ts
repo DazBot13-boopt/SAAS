@@ -1,5 +1,6 @@
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
+import { twitterWorkerHandler } from './twitter';
 import { chromium } from 'playwright-extra';
 import stealth from 'puppeteer-extra-plugin-stealth';
 import { PrismaClient } from '@prisma/client';
@@ -138,5 +139,14 @@ const worker = new Worker(
             socket.emit('worker_state', { username, state: 'IDLE' });
         }
     },
+    { connection: redisConnection }
+);
+
+/**
+ * Twitter Worker Logic
+ */
+const twitterWorker = new Worker(
+    'twitter-actions',
+    twitterWorkerHandler,
     { connection: redisConnection }
 );

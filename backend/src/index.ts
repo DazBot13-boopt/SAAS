@@ -18,8 +18,9 @@ const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://redis:6379
     maxRetriesPerRequest: null,
 });
 
-// BullMQ Queue
+// BullMQ Queues
 const instagramQueue = new Queue('instagram-actions', { connection: redisConnection });
+const twitterQueue = new Queue('twitter-actions', { connection: redisConnection });
 
 // HTTP & Socket.io Server
 const httpServer = createServer(app);
@@ -87,6 +88,64 @@ app.post('/api/accounts/:id/action', async (req, res) => {
     try {
         const job = await instagramQueue.add(action, { accountId: id, action });
         res.json({ jobId: job.id, message: `Action ${action} queued successfully.` });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- TWITTER API ENDPOINTS ---
+
+/**
+ * Get all Twitter accounts
+ */
+app.get('/api/twitter-accounts', async (req, res) => {
+    const accounts = await prisma.twitterAccount.findMany({
+        include: { proxy: true }
+    });
+    res.json(accounts);
+});
+
+/**
+ * Add a new Twitter account + proxy
+ */
+app.post('/api/twitter-accounts', async (req, res) => {
+    const { username, password, email, emailPassword, type, proxy } = req.body;
+
+    try {
+        const newAccount = await prisma.twitterAccount.create({
+            data: {
+                username,
+                password,
+                email,
+                emailPassword,
+                type: type || 'MAIN',
+                userId: 'temp-user-id', // Simplified for now
+                proxy: proxy ? {
+                    create: {
+                        host: proxy.host,
+                        port: parseInt(proxy.port),
+                        username: proxy.username,
+                        password: proxy.password
+                    }
+                } : undefined
+            }
+        });
+        res.status(201).json(newAccount);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+/**
+ * Trigger an automation action for Twitter
+ */
+app.post('/api/twitter-accounts/:id/action', async (req, res) => {
+    const { id } = req.params;
+    const { action } = req.body; // e.g., 'setupProfile', 'joinCommunities', 'post', 'comment'
+
+    try {
+        const job = await twitterQueue.add(action, { accountId: id, action });
+        res.json({ jobId: job.id, message: `Action ${action} queued successfully on Twitter worker.` });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

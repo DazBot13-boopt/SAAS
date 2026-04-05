@@ -6,6 +6,7 @@ import {
     Users,
     Activity,
     Instagram,
+    Twitter,
     Terminal,
     Monitor,
     Plus,
@@ -15,7 +16,8 @@ import {
     WifiOff,
     Camera,
     RefreshCw,
-    Shield
+    Shield,
+    Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -34,13 +36,17 @@ export default function Dashboard() {
     const [screenshots, setScreenshots] = useState<Record<string, string>>({});
     const [activeAccount, setActiveAccount] = useState('');
     const [viewMode, setViewMode] = useState<'SINGLE' | 'GRID'>('SINGLE');
+    const [platform, setPlatform] = useState<'INSTAGRAM' | 'TWITTER'>('INSTAGRAM');
     const [showAddModal, setShowAddModal] = useState(false);
 
     // New Account Form State
-    const [newAcc, setNewAcc] = useState({ username: '', password: '', proxyHost: '', proxyPort: '' });
+    const [newAcc, setNewAcc] = useState({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', type: 'MAIN' });
 
     useEffect(() => {
-        fetchAccounts();
+        fetchAccounts(platform);
+    }, [platform]);
+
+    useEffect(() => {
         const socket = io('http://localhost:4000');
         socket.on('ui_log', (data) => setLogs((prev) => [
             {...data, timestamp: new Date()}, 
@@ -50,12 +56,17 @@ export default function Dashboard() {
         return () => { socket.disconnect(); };
     }, []);
 
-    const fetchAccounts = async () => {
+    const fetchAccounts = async (p: string) => {
         try {
-            const res = await fetch('http://localhost:4000/api/accounts');
+            const url = p === 'TWITTER' ? 'http://localhost:4000/api/twitter-accounts' : 'http://localhost:4000/api/accounts';
+            const res = await fetch(url);
             const data = await res.json();
             setAccounts(data);
-            if (data.length > 0 && !activeAccount) setActiveAccount(data[0].username);
+            if (data.length > 0) {
+                if(!activeAccount || !data.find((a:any) => a.username === activeAccount)) setActiveAccount(data[0].username);
+            } else {
+                setActiveAccount('');
+            }
         } catch (e) {
             console.error("Failed to fetch accounts", e);
         }
@@ -63,22 +74,26 @@ export default function Dashboard() {
 
     const handleAddAccount = async (e: React.FormEvent) => {
         e.preventDefault();
-        await fetch('http://localhost:4000/api/accounts', {
+        const url = platform === 'TWITTER' ? 'http://localhost:4000/api/twitter-accounts' : 'http://localhost:4000/api/accounts';
+        await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 username: newAcc.username,
                 password: newAcc.password,
+                email: newAcc.email,
+                type: newAcc.type,
                 proxy: { host: newAcc.proxyHost, port: newAcc.proxyPort }
             })
         });
         setShowAddModal(false);
-        setNewAcc({ username: '', password: '', proxyHost: '', proxyPort: '' });
-        fetchAccounts();
+        setNewAcc({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', type: 'MAIN' });
+        fetchAccounts(platform);
     };
 
     const launchAction = async (id: string, action: string) => {
-        await fetch(`http://localhost:4000/api/accounts/${id}/action`, {
+        const url = platform === 'TWITTER' ? `http://localhost:4000/api/twitter-accounts/${id}/action` : `http://localhost:4000/api/accounts/${id}/action`;
+        await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action })
@@ -90,26 +105,40 @@ export default function Dashboard() {
     return (
         <div className="flex h-screen bg-[#030303] text-white font-sans selection:bg-violet-500/30 overflow-hidden font-light">
             {/* Ambient Background Glows */}
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-violet-600/10 rounded-full blur-[120px] pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-indigo-900/10 rounded-full blur-[150px] pointer-events-none" />
+            <div className={`absolute top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] pointer-events-none transition-colors duration-1000 ${platform === 'TWITTER' ? 'bg-blue-600/10' : 'bg-fuchsia-600/10'}`} />
+            <div className={`absolute bottom-0 left-0 w-[600px] h-[600px] rounded-full blur-[150px] pointer-events-none transition-colors duration-1000 ${platform === 'TWITTER' ? 'bg-cyan-900/10' : 'bg-indigo-900/10'}`} />
 
             {/* Sidebar */}
             <aside className="w-20 lg:w-24 border-r border-white/5 flex flex-col items-center py-8 gap-8 bg-black/40 backdrop-blur-xl z-50">
-                <motion.div 
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="p-3 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 rounded-2xl shadow-[0_0_30px_rgba(139,92,246,0.3)] text-white cursor-pointer"
-                >
-                    <Instagram size={28} strokeWidth={2.5} />
-                </motion.div>
+                <div className="flex flex-col gap-4">
+                    <motion.div 
+                        title="Switch to Instagram"
+                        onClick={() => setPlatform('INSTAGRAM')}
+                        whileHover={{ scale: 1.1, rotate: 5 }}
+                        whileTap={{ scale: 0.95 }}
+                        className={`p-3 rounded-2xl cursor-pointer ${platform === 'INSTAGRAM' ? 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] to-[#bc1888] shadow-[0_0_30px_rgba(225,48,108,0.4)] text-white' : 'bg-white/5 text-white/40 hover:text-white'}`}
+                    >
+                        <Instagram size={28} strokeWidth={2.5} />
+                    </motion.div>
+
+                    <motion.div 
+                        title="Switch to Twitter / X"
+                        onClick={() => setPlatform('TWITTER')}
+                        whileHover={{ scale: 1.1, rotate: -5 }}
+                        whileTap={{ scale: 0.95 }}
+                        className={`p-3 rounded-2xl cursor-pointer ${platform === 'TWITTER' ? 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-[0_0_30px_rgba(59,130,246,0.3)] text-white' : 'bg-white/5 text-white/40 hover:text-white'}`}
+                    >
+                        <Twitter size={28} strokeWidth={2.5} />
+                    </motion.div>
+                </div>
 
                 <div className="w-8 h-[1px] bg-white/10 my-2" />
 
                 <nav className="flex flex-col gap-6 items-center w-full relative">
-                    <SidebarIcon icon={<LayoutDashboard size={22} />} active={viewMode === 'SINGLE'} onClick={() => setViewMode('SINGLE')} />
-                    <SidebarIcon icon={<Monitor size={22} />} active={viewMode === 'GRID'} onClick={() => setViewMode('GRID')} />
-                    <SidebarIcon icon={<Server size={22} />} />
-                    <SidebarIcon icon={<Users size={22} />} />
+                    <SidebarIcon icon={<LayoutDashboard size={22} />} active={viewMode === 'SINGLE'} onClick={() => setViewMode('SINGLE')} title="Single Node View" />
+                    <SidebarIcon icon={<Monitor size={22} />} active={viewMode === 'GRID'} onClick={() => setViewMode('GRID')} title="Grid Matrix View" />
+                    <SidebarIcon icon={<Server size={22} />} title="Server Resources (Coming Soon)" />
+                    <SidebarIcon icon={<Users size={22} />} title="User Management (Coming Soon)" />
                     
                     <div className="w-8 h-[1px] bg-white/10 my-2" />
 
@@ -129,10 +158,14 @@ export default function Dashboard() {
             <main className="flex-1 flex flex-col overflow-hidden relative z-10">
                 
                 {/* Header */}
-                <header className="h-24 border-b border-white/5 flex items-center justify-between px-10 bg-black/20 backdrop-blur-md z-20">
+                <header className="h-24 border-b border-white/5 flex items-center justify-between px-10 bg-black/20 backdrop-blur-md z-20 transition-all duration-500">
                     <div>
-                        <h2 className="text-2xl font-semibold bg-gradient-to-r from-white to-white/50 bg-clip-text text-transparent tracking-tight">
-                            Duupflow <span className="font-light">Nexus</span>
+                        <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-3">
+                            {platform === 'TWITTER' ? (
+                                <><Twitter className="text-blue-400" /> Duupflow <span className="font-light text-blue-400">X-Automation</span></>
+                            ) : (
+                                <><Instagram className="text-pink-500" /> Duupflow <span className="font-light text-pink-500">Insta-Bot</span></>
+                            )}
                         </h2>
                         <p className="text-xs text-white/40 mt-1 flex items-center gap-2 uppercase tracking-widest">
                             <Activity size={10} className="text-emerald-400" /> System Online • {accounts.length} Node(s)
@@ -147,9 +180,13 @@ export default function Dashboard() {
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             onClick={() => setShowAddModal(true)}
-                            className="bg-gradient-to-r from-violet-600 to-fuchsia-600 px-6 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all"
+                            className={`px-6 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-all ${
+                                platform === 'TWITTER' 
+                                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:shadow-[0_0_20px_rgba(59,130,246,0.4)]' 
+                                : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)]'
+                            }`}
                         >
-                            <Plus size={18} /> New Instance
+                            <Plus size={18} /> New {platform === 'TWITTER' ? 'X Account' : 'Instance'}
                         </motion.button>
                     </div>
                 </header>
@@ -181,8 +218,9 @@ export default function Dashboard() {
                                             account={acc}
                                             active={activeAccount === acc.username}
                                             onClick={() => setActiveAccount(acc.username)}
-                                            onLaunch={() => launchAction(acc.id, 'warmUp')}
+                                            onLaunch={(action) => launchAction(acc.id, action)}
                                             index={i}
+                                            platform={platform}
                                         />
                                     ))}
                                 </AnimatePresence>
@@ -356,6 +394,26 @@ export default function Dashboard() {
                                     <Input label="Username" icon={<Users size={16}/>} value={newAcc.username} onChange={(v: string) => setNewAcc({ ...newAcc, username: v })} />
                                     <Input label="Password" type="password" value={newAcc.password} onChange={(v: string) => setNewAcc({ ...newAcc, password: v })} />
                                 </div>
+
+                                {platform === 'TWITTER' && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Input label="Email Outlook" type="email" value={newAcc.email} onChange={(v: string) => setNewAcc({ ...newAcc, email: v })} />
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Account Role</label>
+                                            <div className="relative">
+                                                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><Briefcase size={16} /></div>
+                                                <select 
+                                                    value={newAcc.type} 
+                                                    onChange={(e) => setNewAcc({...newAcc, type: e.target.value})}
+                                                    className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
+                                                >
+                                                    <option value="MAIN">MAIN (Model)</option>
+                                                    <option value="SUPPORT">SUPPORT (Spammer)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 
                                 <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl space-y-4">
                                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/50">
@@ -420,9 +478,9 @@ function StatCard({ title, value, icon, color }: { title: string, value: string,
     );
 }
 
-function SidebarIcon({ icon, active, onClick }: { icon: any, active?: boolean, onClick?: () => void }) {
+function SidebarIcon({ icon, active, onClick, title }: { icon: any, active?: boolean, onClick?: () => void, title?: string }) {
     return (
-        <div className="relative group w-full flex justify-center">
+        <div className="relative group w-full flex justify-center" title={title}>
             <div 
                 onClick={onClick} 
                 className={`p-3 rounded-xl cursor-pointer transition-all duration-300 relative z-10 w-12 flex justify-center 
@@ -437,24 +495,38 @@ function SidebarIcon({ icon, active, onClick }: { icon: any, active?: boolean, o
     );
 }
 
-function AccountCard({ account, active, onClick, onLaunch, index }: { account: Account, active: boolean, onClick: () => void, onLaunch: () => void, index: number }) {
+function AccountCard({ account, active, onClick, onLaunch, index, platform }: { account: Account, active: boolean, onClick: () => void, onLaunch: (action: string) => void, index: number, platform: string }) {
     const statusTheme = getStatusColor(account.status);
     
+    // Actions mapping depending on platform
+    const platformActions = platform === 'TWITTER' ? [
+        { id: 'warmUp', label: 'Day 1: Warm Up'},
+        { id: 'setupProfile', label: 'Day 2: Setup Profile'},
+        { id: 'joinCommunity', label: 'Day 3: Join Communities'},
+        { id: 'postCommunity', label: 'Day 3: Post Captions'},
+        { id: 'spamComments', label: 'Day 4: Spam Comments (Support)'}
+    ] : [
+        { id: 'warmUp', label: 'Warm Up Account'},
+        { id: 'follow', label: 'Follow Target'}
+    ];
+
+    const [showActions, setShowActions] = useState(false);
+
     return (
         <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
             onClick={onClick} 
-            className={`p-5 rounded-2xl border transition-all duration-300 cursor-pointer relative overflow-hidden group flex flex-col justify-between
+            className={`p-5 rounded-2xl border transition-all duration-300 cursor-pointer relative overflow-visible group flex flex-col justify-between
             ${active ? 'bg-white/[0.04] border-violet-500/50 shadow-[0_4px_30px_rgba(139,92,246,0.1)]' : 'bg-[#0A0A0B] hover:bg-white/[0.02] border-white/5'}`}
         >
             {/* Active glow inside card */}
-            {active && <div className="absolute -top-10 -right-10 w-32 h-32 bg-violet-500/20 rounded-full blur-[40px] pointer-events-none" />}
+            {active && <div className="absolute -top-10 -right-10 w-32 h-32 bg-violet-500/20 rounded-full blur-[40px] pointer-events-none overflow-hidden" />}
 
             <div className="flex items-center justify-between gap-4 mb-5 relative z-10">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600/20 to-fuchsia-600/20 flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform shrink-0">
-                    <Instagram size={20} className="text-violet-300" />
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${platform === 'TWITTER' ? 'from-blue-600/20 to-cyan-600/20' : 'from-violet-600/20 to-fuchsia-600/20'} flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform shrink-0`}>
+                    {platform === 'TWITTER' ? <Twitter size={20} className="text-blue-400" /> : <Instagram size={20} className="text-violet-300" />}
                 </div>
                 <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-white/90 text-[15px] truncate max-w-full">@{account.username}</h4>
@@ -464,13 +536,42 @@ function AccountCard({ account, active, onClick, onLaunch, index }: { account: A
                     </div>
                 </div>
                 
-                <button 
-                    onClick={(e) => { e.stopPropagation(); onLaunch(); }} 
-                    className="p-2.5 bg-white/5 text-white/60 rounded-xl hover:bg-white hover:text-black transition-all shadow-sm shrink-0"
-                    title="Run Action"
-                >
-                    <Play size={16} fill="currentColor" />
-                </button>
+                <div className="relative">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setShowActions(!showActions); }} 
+                        className="p-2.5 bg-white/5 text-white/60 rounded-xl hover:bg-white hover:text-black transition-all shadow-sm shrink-0 flex items-center gap-1"
+                        title="Run Action"
+                    >
+                        <Play size={16} fill="currentColor" />
+                    </button>
+                    <AnimatePresence>
+                        {showActions && (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                className="absolute right-0 top-full mt-2 w-56 bg-[#121215] border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-50 overflow-hidden"
+                            >
+                                <div className="p-2 flex flex-col gap-1">
+                                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/40 font-semibold">Select Action</div>
+                                    {platformActions.map(action => (
+                                        <button 
+                                            key={action.id}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onLaunch(action.id);
+                                                setShowActions(false);
+                                            }}
+                                            className="px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white rounded-lg transition-colors truncate"
+                                        >
+                                            {action.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
 
             <div className="space-y-2 relative z-10">
