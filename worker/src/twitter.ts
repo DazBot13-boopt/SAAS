@@ -12,13 +12,29 @@ chromium.use(stealth());
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const randomRange = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1) + min);
 
+async function humanScroll(page: Page) {
+    const scrolls = randomRange(1, 3);
+    for (let i = 0; i < scrolls; i++) {
+        const direction = Math.random() > 0.2 ? 1 : -1; // 80% down, 20% up
+        await page.mouse.wheel(0, direction * randomRange(200, 600));
+        await sleep(randomRange(800, 2500));
+    }
+}
+
 async function fastType(page: Page, selector: string, text: string) {
     // Only target visible inputs to avoid grabbing hidden honeypots
     const loc = page.locator(selector).first();
     await loc.click({ delay: randomRange(50, 150) });
+    await sleep(randomRange(300, 800)); // Pause after clicking like a human
     
-    // Use pressSequentially with built-in realistic delay
-    await loc.pressSequentially(text, { delay: randomRange(80, 200) });
+    // Simulation de frappe au clavier très humaine avec des micro-pauses
+    for (const char of text) {
+        await loc.pressSequentially(char, { delay: randomRange(40, 200) });
+        // 5% de chance de faire une pause d'hésitation pendant la frappe
+        if (Math.random() < 0.05) {
+            await sleep(randomRange(200, 600)); 
+        }
+    }
 }
 
 async function doTwitterLogin(page: Page, account: any, emitLog: (msg: string) => void) {
@@ -26,15 +42,12 @@ async function doTwitterLogin(page: Page, account: any, emitLog: (msg: string) =
     await page.goto('https://www.google.com/', { waitUntil: 'domcontentloaded' });
     await sleep(randomRange(1000, 2000));
     
-    emitLog("🔒 Étape 2 : Pré-chargement de la racine X avec referer...");
+    emitLog("🔒 Étape 2 : Chargement de la page d'accueil X.com...");
     await page.goto('https://x.com/', { referer: 'https://www.google.com/', waitUntil: 'domcontentloaded' });
     await sleep(randomRange(2000, 4000));
 
-    emitLog('🔒 Navigation vers la page de login...');
-    await page.goto('https://x.com/i/flow/login', { waitUntil: 'networkidle' });
-    await sleep(randomRange(3000, 5000));
-
     emitLog("⚠️ ACTION REQUISE SUR LE NAVIGATEUR !");
+    emitLog("👉 Cliquez manuellement sur le bouton 'Se connecter' (Log in) sur la page.");
     emitLog("Veuillez saisir vos identifiants à la main sur la fenêtre Chromium visible.");
     emitLog("Le robot est en pause. Vous avez 10 minutes. Il reprendra dès que vous serez connecté !");
     
@@ -51,13 +64,11 @@ async function doTwitterLogin(page: Page, account: any, emitLog: (msg: string) =
 async function doWarmUp(page: Page, emitLog: (msg: string) => void) {
     emitLog('🐦 Warm Up : Navigation de la page principale...');
     await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
-    await sleep(randomRange(3000, 5000));
+    await sleep(randomRange(4000, 7000));
     
-    emitLog('📜 Scroll vertical progressif...');
-    for (let i = 0; i < randomRange(3, 6); i++) {
-        await page.mouse.wheel(0, randomRange(300, 700));
-        await sleep(randomRange(1500, 3000));
-    }
+    emitLog('📜 Scroll vertical très progressif (Mode Humain)...');
+    await humanScroll(page);
+    await sleep(randomRange(2000, 4000));
     
     emitLog('✨ Fin du Warm Up classique.');
 }
@@ -81,51 +92,28 @@ export const twitterWorkerHandler = async (job: any) => {
         password: account.proxy.password || undefined,
     } : undefined;
 
-    emitLog("🌐 Génération d'une empreinte digitale (Fingerprint) unique...");
-    
-    let FingerprintGenerator, FingerprintInjector;
-    try {
-        const genModule = await import('fingerprint-generator');
-        const injModule = await import('fingerprint-injector');
-        FingerprintGenerator = genModule.FingerprintGenerator;
-        FingerprintInjector = injModule.FingerprintInjector;
-    } catch(e: any) {
-        throw new Error(`Modules fingerprint manquants ou erreur import ESM: ${e.message}`);
-    }
+    emitLog("🚀 Configuration de Chrome (mode standard)...");
+    // Suppression de l'injecteur artificiel de fingerprint qui fait crasher React
+    // Utilisation native du plugin Stealth seul.
 
-    const fingerprintGenerator = new FingerprintGenerator();
-    const fingerprintInjector = new FingerprintInjector();
-
-    const fingerprintResult = fingerprintGenerator.getFingerprint({
-        devices: ['desktop', 'mobile'],
-        operatingSystems: ['windows', 'macos'],
-        browsers: ['chrome', 'edge']
-    });
-    const fp = fingerprintResult.fingerprint;
-
-    emitLog('🚀 Démarrage du navigateur Chromium autonome en mode Stealth...');
+    emitLog('🚀 Démarrage du véritable Google Chrome en mode Stealth...');
     const browser = await chromium.launch({
         headless: false,
+        channel: 'chrome', // Utilise le vrai Google Chrome installé au lieu du Chromium modifié
         proxy: proxyConfig,
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox', 
             '--disable-notifications',
-            '--disable-blink-features=AutomationControlled',
-            `--window-size=${fp.screen.width},${fp.screen.height}`
+            '--disable-blink-features=AutomationControlled'
         ],
         ignoreDefaultArgs: ['--enable-automation']
     });
 
     const context = await browser.newContext({
-        userAgent: fp.navigator.userAgent,
-        viewport: { width: fp.screen.width, height: fp.screen.height },
-        locale: fp.navigator.language,
         colorScheme: 'dark',
+        viewport: null
     });
-
-    // Inject low-level fingerprinting overrides
-    await fingerprintInjector.attachFingerprintToPlaywright(context, fingerprintResult);
     
     // Check if we are already logged in through sessionCookies
     let isAuthenticated = false;
@@ -137,12 +125,7 @@ export const twitterWorkerHandler = async (job: any) => {
     const pages = context.pages();
     const page = pages.length > 0 ? pages[0] : await context.newPage();
 
-    // Deep Stealth injection
-    await page.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        // @ts-ignore
-        window.navigator.chrome = { runtime: {} };
-    });
+    // Removed unsafe manual stealth injection that conflicts with plugins
 
     // Fast Screenshot Interval for Dashboard
     const screenshotInterval = setInterval(async () => {
@@ -162,6 +145,7 @@ export const twitterWorkerHandler = async (job: any) => {
                 emitLog('✅ Session confirmée, accès direct accordé !');
             } catch(e) {
                 emitLog('⚠️ Session non détectée par Twitter ou expirée, connexion requise.');
+                await context.clearCookies(); // Crucial: clean up bad cookies before trying to login manually!
                 isAuthenticated = false;
             }
         }
@@ -238,7 +222,8 @@ const COMMENTS = [
 async function doSetupProfile(page: Page, emitLog: (msg: string) => void) {
     emitLog('⚙️ Mise à jour du profil (Génération de Bio)...');
     await page.goto('https://x.com/settings/profile', { waitUntil: 'domcontentloaded' });
-    await sleep(randomRange(3000, 5000));
+    await sleep(randomRange(4000, 7000));
+    await humanScroll(page); // hésitation humaine avant d'éditer le profil
     
     const bioInput = 'textarea[data-testid="ProfileDescription_Input"]';
     try {
@@ -273,21 +258,22 @@ async function doJoinCommunity(page: Page, emitLog: (msg: string) => void) {
     try {
         await page.waitForSelector(searchInput, { state: 'visible', timeout: 10000 });
         await fastType(page, searchInput, 'Web3 Crypto');
+        await sleep(randomRange(1000, 2000)); // Pause avant d'appuyer sur Entrée
         await page.keyboard.press('Enter');
         
         emitLog('🔍 Navigation vers l\'onglet "Latest"...');
-        await sleep(randomRange(3000, 5000));
+        await sleep(randomRange(4000, 6000));
         
         const latestTab = await page.$$('a[role="tab"]');
         if (latestTab.length > 1) await latestTab[1].click();
         
-        await sleep(randomRange(2000, 4000));
+        await sleep(randomRange(3000, 5000));
         
         for(let i=0; i < 3; i++) {
-            await page.mouse.wheel(0, randomRange(500, 1500));
-            await sleep(randomRange(1000, 3000));
+            await humanScroll(page);
             const likeBtns = await page.$$('[data-testid="like"]');
             if (likeBtns.length > i) {
+                await sleep(randomRange(800, 1500)); // Pause avant de liker
                 await likeBtns[i].click().catch(()=>{});
                 emitLog(`❤️ Liked tweet #${i+1}`);
             }
@@ -301,7 +287,8 @@ async function doJoinCommunity(page: Page, emitLog: (msg: string) => void) {
 async function doPostCommunity(page: Page, emitLog: (msg: string) => void) {
     emitLog('📝 Publication d\'un Tweet aléatoire...');
     await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
-    await sleep(randomRange(3000, 5000));
+    await sleep(randomRange(4000, 6000));
+    await humanScroll(page); // Un peu de lecture avant de poster
     
     try {
         const composeBtn = 'a[data-testid="SideNav_NewTweet_Button"]';
@@ -329,10 +316,10 @@ async function doPostCommunity(page: Page, emitLog: (msg: string) => void) {
 async function doSpamComments(page: Page, emitLog: (msg: string) => void) {
     emitLog('💬 Mode Spam Commentaires : Ciblage de post viral...');
     await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
-    await sleep(randomRange(3000, 5000));
+    await sleep(randomRange(4000, 7000));
     
     try {
-        await page.mouse.wheel(0, randomRange(1000, 3000));
+        await humanScroll(page);
         await sleep(randomRange(2000, 4000));
         
         const replyBtns = await page.$$('[data-testid="reply"]');
