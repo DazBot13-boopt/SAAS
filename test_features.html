@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Features</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #0f172a;
+            color: white;
+        }
+        .container {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        h1 { color: #60a5fa; }
+        h2 { color: #a78bfa; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #2563eb; }
+        pre {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .success { color: #22c55e; }
+        .error { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test des Fonctionnalités</h1>
+    
+    <div class="container">
+        <h2>1️⃣ Groupes de Comptes</h2>
+        <button onclick="testGroups()">Tester Groupes</button>
+        <pre id="groups-result">Cliquez pour tester...</pre>
+    </div>
+
+    <div class="container">
+        <h2>2️⃣ Templates de Contenu</h2>
+        <button onclick="testTemplates()">Tester Templates</button>
+        <pre id="templates-result">Cliquez pour tester...</pre>
+    </div>
+
+    <div class="container">
+        <h2>3️⃣ Historique des Activités</h2>
+        <button onclick="testActivities()">Tester Activités</button>
+        <pre id="activities-result">Cliquez pour tester...</pre>
+    </div>
+
+    <div class="container">
+        <h2>4️⃣ Distribution de Commentaires</h2>
+        <button onclick="testComments()">Tester Commentaires</button>
+        <pre id="comments-result">Cliquez pour tester...</pre>
+    </div>
+
+    <div class="container">
+        <h2>5️⃣ Notifications</h2>
+        <button onclick="testNotifications()">Tester Notifications</button>
+        <pre id="notifications-result">Cliquez pour tester...</pre>
+    </div>
+
+    <div class="container">
+        <h2>6️⃣ Comptes Twitter</h2>
+        <button onclick="testAccounts()">Tester Comptes</button>
+        <pre id="accounts-result">Cliquez pour tester...</pre>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:4000';
+
+        async function testGroups() {
+            const result = document.getElementById('groups-result');
+            try {
+                result.textContent = 'Chargement...';
+                const res = await fetch(`${API_URL}/api/groups`);
+                const data = await res.json();
+                result.innerHTML = `<span class="success">✅ SUCCÈS!</span>\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ ERREUR:</span> ${error.message}`;
+            }
+        }
+
+        async function testTemplates() {
+            const result = document.getElementById('templates-result');
+            try {
+                result.textContent = 'Chargement...';
+                const res = await fetch(`${API_URL}/api/templates`);
+                const data = await res.json();
+                result.innerHTML = `<span class="success">✅ SUCCÈS!</span>\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ ERREUR:</span> ${error.message}`;
+            }
+        }
+
+        async function testActivities() {
+            const result = document.getElementById('activities-result');
+            try {
+                result.textContent = 'Chargement...';
+                const res = await fetch(`${API_URL}/api/activities?limit=10`);
+                const data = await res.json();
+                result.innerHTML = `<span class="success">✅ SUCCÈS!</span>\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ ERREUR:</span> ${error.message}`;
+            }
+        }
+
+        async function testComments() {
+            const result = document.getElementById('comments-result');
+            try {
+                result.textContent = 'Chargement...';
+                const res = await fetch(`${API_URL}/api/comment-requests`);
+                const data = await res.json();
+                result.innerHTML = `<span class="success">✅ SUCCÈS!</span>\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ ERREUR:</span> ${error.message}`;
+            }
+        }
+
+        async function testNotifications() {
+            const result = document.getElementById('notifications-result');
+            try {
+                result.textContent = 'Chargement...';
+                const res = await fetch(`${API_URL}/api/notifications`);
+                const data = await res.json();
+                result.innerHTML = `<span class="success">✅ SUCCÈS!</span>\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ ERREUR:</span> ${error.message}`;
+            }
+        }
+
+        async function testAccounts() {
+            const result = document.getElementById('accounts-result');
+            try {
+                result.textContent = 'Chargement...';
+                const res = await fetch(`${API_URL}/api/twitter-accounts`);
+                const data = await res.json();
+                result.innerHTML = `<span class="success">✅ SUCCÈS!</span>\n\nNombre de comptes: ${data.length}\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ ERREUR:</span> ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extraire Cookies Twitter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1DA1F2;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #1DA1F2;
+        }
+        code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        textarea {
+            width: 100%;
+            min-height: 300px;
+            margin: 10px 0;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #1DA1F2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0d8bd9;
+        }
+        .output {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍓 Extraire Cookies Twitter/X</h1>
+        
+        <div class="step">
+            <h3>Étape 1: Connectez-vous à Twitter</h3>
+            <p>1. Ouvrez un nouvel onglet et allez sur <a href="https://x.com" target="_blank">x.com</a></p>
+            <p>2. Connectez-vous avec vos identifiants</p>
+            <p>3. Revenez ici une fois connecté</p>
+        </div>
+
+        <div class="step">
+            <h3>Étape 2: Ouvrez la Console Développeur</h3>
+            <p>1. Sur l'onglet x.com, appuyez sur <code>F12</code></p>
+            <p>2. Allez dans l'onglet <strong>"Console"</strong></p>
+            <p>3. Copiez et collez le code ci-dessous:</p>
+            <textarea readonly id="extractCode">
+// Copiez TOUT ce code dans la console de x.com
+const cookies = document.cookie.split('; ').map(cookie => {
+    const [name, ...valueParts] = cookie.split('=');
+    return { name, value: valueParts.join('=') };
+});
+
+const result = {
+    auth_token: cookies.find(c => c.name === 'auth_token')?.value || 'MANQUANT',
+    ct0: cookies.find(c => c.name === 'ct0')?.value || 'MANQUANT',
+    allCookies: cookies
+};
+
+console.log('═══════════════════════════════════════════');
+console.log('🍪 COOKIES TWITTER EXTRAITS');
+console.log('═══════════════════════════════════════════');
+console.log('auth_token:', result.auth_token);
+console.log('ct0:', result.ct0);
+console.log('═══════════════════════════════════════════');
+console.log('Copiez tout le JSON ci-dessous:');
+console.log(JSON.stringify(result, null, 2));
+            </textarea>
+            <button onclick="copyExtractCode()">📋 Copier le code</button>
+        </div>
+
+        <div class="step">
+            <h3>Étape 3: Collez le résultat ici</h3>
+            <p>Collez le JSON obtenu de la console:</p>
+            <textarea id="inputCookies" placeholder='Collez le JSON ici...'></textarea>
+            <button onclick="generateUpdate()">🔧 Générer le script de mise à jour</button>
+        </div>
+
+        <div id="outputSection" style="display:none;">
+            <div class="step">
+                <h3>Étape 4: Exécutez le script</h3>
+                <p>1. Copiez le script ci-dessous</p>
+                <p>2. Enregistrez-le dans <code>d:\SAAS\worker\apply_cookies.js</code></p>
+                <p>3. Exécutez: <code>node d:\SAAS\worker\apply_cookies.js</code></p>
+                <div class="output" id="outputScript"></div>
+                <button onclick="copyOutputScript()">📋 Copier le script</button>
+            </div>
+        </div>
+
+        <div class="warning">
+            <strong>⚠️ Important:</strong>
+            <ul>
+                <li>Les cookies expirent après quelques jours/semaines</li>
+                <li>Vous devrez les mettre à jour régulièrement</li>
+                <li>Ne partagez JAMAIS vos cookies avec quelqu'un d'autre</li>
+                <li>auth_token et ct0 sont les 2 cookies les plus importants</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function copyExtractCode() {
+            const code = document.getElementById('extractCode').value;
+            navigator.clipboard.writeText(code).then(() => {
+                alert('✅ Code copié! Collez-le dans la console de x.com (F12)');
+            });
+        }
+
+        function generateUpdate() {
+            const input = document.getElementById('inputCookies').value.trim();
+            if (!input) {
+                alert('❌ Veuillez coller le JSON des cookies');
+                return;
+            }
+
+            try {
+                const data = JSON.parse(input);
+                
+                if (!data.auth_token || data.auth_token === 'MANQUANT') {
+                    alert('❌ Cookie auth_token manquant! Assurez-vous d\\'être connecté à x.com');
+                    return;
+                }
+
+                if (!data.ct0 || data.ct0 === 'MANQUANT') {
+                    alert('⚠️ Cookie ct0 manquant. Le script va essayer sans, mais ça peut ne pas fonctionner.');
+                }
+
+                const script = `const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+async function applyCookies() {
+    try {
+        const cookies = [
+            {
+                name: 'auth_token',
+                value: '${data.auth_token}',
+                domain: '.x.com',
+                path: '/',
+                secure: true,
+                httpOnly: true,
+                sameSite: 'Lax'
+            },
+            {
+                name: 'ct0',
+                value: '${data.ct0 || ''}',
+                domain: '.x.com',
+                path: '/',
+                secure: true,
+                httpOnly: false,
+                sameSite: 'Lax'
+            }${data.allCookies ? data.allCookies.filter(c => 
+                !['auth_token', 'ct0'].includes(c.name) && c.value
+            ).map(c => `,
+            {
+                name: '${c.name}',
+                value: '${c.value}',
+                domain: '.x.com',
+                path: '/',
+                secure: true,
+                httpOnly: false
+            }`).join('') : ''}
+        ];
+
+        console.log('🍪 Application de', cookies.length, 'cookies...');
+        
+        const updated = await prisma.twitterAccount.update({
+            where: { username: 'DlnHack1' },
+            data: {
+                sessionCookies: cookies,
+                ct0: '${data.ct0 || ''}',
+                status: 'ACTIVE'
+            }
+        });
+
+        console.log('✅ Cookies appliqués avec succès!');
+        console.log('Compte:', updated.username);
+        console.log('Status:', updated.status);
+        console.log('\\n🚀 Le bot va maintenant pouvoir utiliser ces cookies pour se connecter.');
+        console.log('💡 Redémarrez le worker si nécessaire.');
+    } catch (error) {
+        console.error('❌ Erreur:', error.message);
+    } finally {
+        await prisma.$disconnect();
+    }
+}
+
+applyCookies();
+`;
+
+                document.getElementById('outputScript').textContent = script;
+                document.getElementById('outputSection').style.display = 'block';
+                
+            } catch (error) {
+                alert('❌ JSON invalide! Vérifiez le format: ' + error.message);
+            }
+        }
+
+        function copyOutputScript() {
+            const script = document.getElementById('outputScript').textContent;
+            navigator.clipboard.writeText(script).then(() => {
+                alert('✅ Script copié! Enregistrez-le dans d:\\SAAS\\worker\\apply_cookies.js puis exécutez: node d:\\SAAS\\worker\\apply_cookies.js');
+            });
+        }
+    </script>
+</body>
+</html>

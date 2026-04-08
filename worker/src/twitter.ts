@@ -392,6 +392,19 @@ async function doManualLogin(
     try {
         emitLog("🔑 Saisie automatique des identifiants...");
         
+        // Check if we have credentials to use
+        const loginText = account.email || account.username;
+        const hasPassword = account.password && account.password !== account.username;
+        
+        if (!hasPassword) {
+            emitLog("⚠️ MOT DE PASSE MANQUANT - Connexion automatique impossible!");
+            emitLog("💡 Vous devez soit:");
+            emitLog("   1. Ajouter le mot de passe au compte dans la base de données");
+            emitLog("   2. Ou fournir des cookies valides (auth_token + ct0)");
+            emitLog("⏳ En attente de connexion manuelle (15 minutes)...");
+            emitLog("💡 Connectez-vous manuellement dans la fenêtre du navigateur");
+        }
+        
         // Wait for page to fully load JavaScript
         await sleep(randomRange(2000, 4000));
         await humanWander(page);
@@ -427,7 +440,6 @@ async function doManualLogin(
         await sleep(randomRange(500, 1200));
         
         // Determine what to type (email, phone, or username)
-        const loginText = account.email || account.username;
         emitLog(`✍️ Saisie de l'identifiant: ${loginText}`);
         await humanType(page, usernameSelector, loginText);
         
@@ -543,48 +555,54 @@ async function doManualLogin(
             }
         }
 
-        if (passwordField && await passwordField.count() > 0 && account.password) {
-            await humanWander(page);
-            await sleep(randomRange(800, 1800));
-            await humanClick(page, passwordField);
-            await sleep(randomRange(600, 1500));
-            
-            emitLog("✍️ Saisie du mot de passe...");
-            await humanType(page, passwordSelector, account.password);
-            
-            // Wait before submitting
-            await sleep(randomRange(1500, 3000));
-            await humanWander(page);
+        if (passwordField && await passwordField.count() > 0) {
+            if (!hasPassword) {
+                emitLog("⚠️ Mot de passe non configuré - Connexion manuelle requise");
+                emitLog("💡 Veuillez saisir le mot de passe manuellement dans le navigateur");
+                // Don't return false yet, wait for manual login
+            } else {
+                await humanWander(page);
+                await sleep(randomRange(800, 1800));
+                await humanClick(page, passwordField);
+                await sleep(randomRange(600, 1500));
+                
+                emitLog("✍️ Saisie du mot de passe...");
+                await humanType(page, passwordSelector, account.password);
+                
+                // Wait before submitting
+                await sleep(randomRange(1500, 3000));
+                await humanWander(page);
 
-            // Click "Log in" button
-            emitLog("🔓 Connexion en cours...");
-            const loginButtonSelectors = [
-                'button[data-testid="LoginForm_Login_Submit"]',
-                'button[type="submit"]',
-                'div[role="button"]:has-text("Log in")',
-                'div[role="button"]:has-text("Se connecter")',
-                'span:has-text("Log in")',
-            ];
+                // Click "Log in" button
+                emitLog("🔓 Connexion en cours...");
+                const loginButtonSelectors = [
+                    'button[data-testid="LoginForm_Login_Submit"]',
+                    'button[type="submit"]',
+                    'div[role="button"]:has-text("Log in")',
+                    'div[role="button"]:has-text("Se connecter")',
+                    'span:has-text("Log in")',
+                ];
 
-            let loginClicked = false;
-            for (const selector of loginButtonSelectors) {
-                const btn = page.locator(selector).first();
-                if (await btn.count() > 0) {
-                    emitLog(`✅ Bouton Login trouvé: ${selector}`);
-                    await humanClick(page, btn);
-                    loginClicked = true;
-                    break;
+                let loginClicked = false;
+                for (const selector of loginButtonSelectors) {
+                    const btn = page.locator(selector).first();
+                    if (await btn.count() > 0) {
+                        emitLog(`✅ Bouton Login trouvé: ${selector}`);
+                        await humanClick(page, btn);
+                        loginClicked = true;
+                        break;
+                    }
                 }
-            }
 
-            if (!loginClicked) {
-                emitLog("⚠️ Bouton Login non trouvé, tentative avec Enter...");
-                await page.keyboard.press('Enter');
-            }
+                if (!loginClicked) {
+                    emitLog("⚠️ Bouton Login non trouvé, tentative avec Enter...");
+                    await page.keyboard.press('Enter');
+                }
 
-            emitLog("⏳ Attente de la validation...");
+                emitLog("⏳ Attente de la validation...");
+            }
         } else {
-            emitLog("⚠️ Champ mot de passe non trouvé ou mot de passe manquant");
+            emitLog("⚠️ Champ mot de passe non trouvé");
         }
 
     } catch (err: any) {
@@ -634,7 +652,7 @@ async function validateSession(page: Page, emitLog: (msg: string) => void): Prom
 // ─── Warm Up ──────────────────────────────────────────────────────────────────
 
 async function doWarmUp(page: Page, emitLog: (msg: string) => void) {
-    emitLog("🔥 Warm Up : Navigation naturelle sur X...");
+    emitLog("🔥 Warm Up : Navigation naturelle sur X (cible: OnlyFans/Adult content)...");
 
     await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
     await sleep(randomRange(4000, 7000));
@@ -647,14 +665,14 @@ async function doWarmUp(page: Page, emitLog: (msg: string) => void) {
         await humanScroll(page, 1);
     }
 
-    // Sometimes like a post
-    if (Math.random() > 0.5) {
+    // Sometimes like a post - focus on model/adult content
+    if (Math.random() > 0.4) {
         const likeBtns = await page.$$('[data-testid="like"]');
         if (likeBtns.length > 0) {
             const idx = randomRange(0, Math.min(likeBtns.length - 1, 4));
             await sleep(randomRange(1500, 3500));
             await humanClick(page, likeBtns[idx]);
-            emitLog(`❤️ Liked a post during warm up`);
+            emitLog(`❤️ Liked a post during warm up (OnlyFans niche)`);
         }
     }
 
@@ -664,44 +682,52 @@ async function doWarmUp(page: Page, emitLog: (msg: string) => void) {
 // ─── Auto Like ────────────────────────────────────────────────────────────────
 
 async function doAutoLike(page: Page, emitLog: (msg: string) => void, config: any) {
-    const count = config?.count || randomRange(3, 8);
-    emitLog(`❤️ Auto-Like : Ciblage de ${count} posts...`);
+    const count = config?.count || randomRange(5, 12);
+    emitLog(`❤️ Auto-Like : Ciblage de ${count} posts (contenu adulte/NSFW uniquement)...`);
 
-    await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
-    await sleep(randomRange(3000, 6000));
+    // Go to explore adult content - use specific search terms
+    const adultKeywords = ['onlyfans', 'nsfw', 'adult content', '18+', 'model', 'babe'];
+    const keyword = adultKeywords[randomRange(0, adultKeywords.length - 1)];
+    
+    emitLog(`🔍 Recherche: "${keyword}" (contenu adulte)`);
+    await page.goto(`https://x.com/search?q=${encodeURIComponent(keyword)}&f=user`, { waitUntil: 'domcontentloaded' });
+    await sleep(randomRange(4000, 7000));
+    
+    // Navigate to a creator's profile and like their posts
+    await humanScroll(page, 3);
+    await sleep(randomRange(2000, 4000));
 
     let liked = 0;
     let scrollAttempts = 0;
 
-    while (liked < count && scrollAttempts < 15) {
+    while (liked < count && scrollAttempts < 20) {
         await humanScroll(page, 2);
         const likeBtns = await page.$$('[data-testid="like"]');
 
         for (const btn of likeBtns) {
             if (liked >= count) break;
-            const ariaPressed = await btn.getAttribute('data-testid').catch(() => null);
-            // Only click unliked posts (aria-label contains "Like" not "Unlike")
+            // Only click unliked posts
             const ariaLabel = await btn.evaluate((el: any) => el.closest('[aria-label]')?.getAttribute('aria-label') || '').catch(() => '');
             if (ariaLabel.toLowerCase().includes('unlike')) continue;
 
             await sleep(randomRange(2000, 5000));
             await humanClick(page, btn);
             liked++;
-            emitLog(`❤️ Liked post #${liked}/${count}`);
+            emitLog(`❤️ Liked adult content post #${liked}/${count}`);
             await sleep(randomRange(1500, 4000));
         }
         scrollAttempts++;
     }
 
-    emitLog(`✅ Auto-Like terminé : ${liked} posts likés.`);
+    emitLog(`✅ Auto-Like terminé : ${liked} posts de contenu adulte likés.`);
 }
 
 // ─── Auto Follow ──────────────────────────────────────────────────────────────
 
 async function doAutoFollow(page: Page, emitLog: (msg: string) => void, config: any) {
-    const keyword = config?.keyword || 'crypto web3';
+    const keyword = config?.keyword || 'onlyfans model content creator';
     const count = config?.count || randomRange(3, 7);
-    emitLog(`👥 Auto-Follow : Recherche de "${keyword}" pour suivre ${count} comptes...`);
+    emitLog(`👥 Auto-Follow : Recherche de "${keyword}" pour suivre ${count} comptes (OnlyFans/Models)...`);
 
     // Go to search
     await page.goto(`https://x.com/search?q=${encodeURIComponent(keyword)}&f=user`, { waitUntil: 'domcontentloaded' });
@@ -722,28 +748,33 @@ async function doAutoFollow(page: Page, emitLog: (msg: string) => void, config: 
             await sleep(randomRange(3000, 7000));
             await humanClick(page, btn);
             followed++;
-            emitLog(`👤 Followed account #${followed}/${count}`);
+            emitLog(`👤 Followed account #${followed}/${count} (OnlyFans niche)`);
             await sleep(randomRange(2000, 5000));
         }
         scrollAttempts++;
     }
 
-    emitLog(`✅ Auto-Follow terminé : ${followed} comptes suivis.`);
+    emitLog(`✅ Auto-Follow terminé : ${followed} comptes suivis (models/OF creators).`);
 }
 
 // ─── Auto Retweet ─────────────────────────────────────────────────────────────
 
 async function doAutoRetweet(page: Page, emitLog: (msg: string) => void, config: any) {
     const count = config?.count || randomRange(2, 5);
-    emitLog(`🔁 Auto-Retweet : Ciblage de ${count} posts...`);
+    emitLog(`🔁 Auto-Retweet : Ciblage de ${count} posts de contenu adulte...`);
 
-    await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
-    await sleep(randomRange(3000, 6000));
+    // Search for adult content to retweet
+    const adultKeywords = ['onlyfans', 'nsfw', 'adult content', '18+', 'model'];
+    const keyword = adultKeywords[randomRange(0, adultKeywords.length - 1)];
+    
+    emitLog(`🔍 Recherche: "${keyword}" (contenu adulte)`);
+    await page.goto(`https://x.com/search?q=${encodeURIComponent(keyword)}`, { waitUntil: 'domcontentloaded' });
+    await sleep(randomRange(4000, 7000));
 
     let retweeted = 0;
     let scrollAttempts = 0;
 
-    while (retweeted < count && scrollAttempts < 12) {
+    while (retweeted < count && scrollAttempts < 15) {
         await humanScroll(page, 2);
         const rtBtns = await page.$$('[data-testid="retweet"]');
 
@@ -758,44 +789,64 @@ async function doAutoRetweet(page: Page, emitLog: (msg: string) => void, config:
             if (await confirmBtn.count() > 0) {
                 await humanClick(page, confirmBtn);
                 retweeted++;
-                emitLog(`🔁 Retweeté #${retweeted}/${count}`);
+                emitLog(`🔁 Retweeté contenu adulte #${retweeted}/${count}`);
             }
             await sleep(randomRange(2000, 5000));
         }
         scrollAttempts++;
     }
 
-    emitLog(`✅ Auto-Retweet terminé : ${retweeted} posts retweetés.`);
+    emitLog(`✅ Auto-Retweet terminé : ${retweeted} posts de contenu adulte retweetés.`);
 }
 
 // ─── Auto Comment ─────────────────────────────────────────────────────────────
 
 const AUTO_COMMENTS = [
-    "This is exactly what I needed to see today 🔥",
-    "Fully agree! The space is evolving so fast 🚀",
-    "Been saying this for months, finally someone gets it!",
-    "Great insight, thanks for sharing 👏",
-    "LFG! This is the way 📈",
-    "Absolutely huge. Bullish on this 💯",
-    "This aged like fine wine 🍷",
-    "Facts only here. Real talk 🎯",
-    "The alpha is in the details 🧠",
-    "Needed this reminder today, thanks 🙏",
+    "🔥🔥🔥 So fucking hot!",
+    "Damn girl, you're sexy as hell 😍🍑",
+    "This is pure porn perfection 💦💯",
+    "I need this in my bed tonight 😈🔥",
+    "Your body is incredible, fucking goddess 🍑👅",
+    "I'm so hard right now 😍💦",
+    "Fuck, you're beautiful! Want you so bad 🔥🍆",
+    "This pussy is perfect babe 😍💦",
+    "I'd smash that all night long 😈🔥",
+    "Your tits are fucking amazing 🍒🔥",
+    "Need to fuck you right now 😍💦",
+    "So wet just looking at this 💦😈",
+    "Best porn I've seen today 🔥🍑",
+    "You're my new favorite pornstar 😍💋",
+    "Fuck me, you're hot! Link? 😈🔥",
+    "I'm cumming just watching this 💦😍",
+    "Your ass is fucking perfect 🍑🔥",
+    "Wanna eat that pussy so bad 😍👅",
+    "This is why I love OnlyFans 🔥💦",
+    "Subscribe to your OF right now! 😍💋",
+    "How much for a private show? 😈💦",
+    "Your content is so fucking addictive 🔥😍",
+    "I jerk off to this every night 💦😈",
+    "Best tits on Twitter! 🍒🔥",
+    "Need your OnlyFans link babe! 😍💋",
 ];
 
 async function doAutoComment(page: Page, emitLog: (msg: string) => void, config: any) {
     const count = config?.count || randomRange(2, 4);
     const customComments = config?.comments || AUTO_COMMENTS;
-    emitLog(`💬 Auto-Comment : Publication de ${count} commentaires...`);
+    emitLog(`💬 Auto-Comment : Publication de ${count} commentaires sur contenu adulte...`);
 
-    await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
+    // Search for adult content creators
+    const adultKeywords = ['onlyfans', 'nsfw', 'adult', 'model', '18+'];
+    const keyword = adultKeywords[randomRange(0, adultKeywords.length - 1)];
+    
+    emitLog(`🔍 Recherche de contenu: "${keyword}"`);
+    await page.goto(`https://x.com/search?q=${encodeURIComponent(keyword)}`, { waitUntil: 'domcontentloaded' });
     await sleep(randomRange(4000, 7000));
     await humanScroll(page, 3);
 
     let commented = 0;
     let scrollAttempts = 0;
 
-    while (commented < count && scrollAttempts < 10) {
+    while (commented < count && scrollAttempts < 15) {
         const replyBtns = await page.$$('[data-testid="reply"]');
 
         for (const btn of replyBtns) {
@@ -809,7 +860,7 @@ async function doAutoComment(page: Page, emitLog: (msg: string) => void, config:
             if (await ta.count() === 0) continue;
 
             const comment = customComments[randomRange(0, customComments.length - 1)];
-            emitLog(`✍️ Réponse : "${comment}"`);
+            emitLog(`✍️ Commentaire adulte: "${comment}"`);
             await humanType(page, textArea, comment);
             await sleep(randomRange(1500, 3000));
 
@@ -817,7 +868,7 @@ async function doAutoComment(page: Page, emitLog: (msg: string) => void, config:
             if (await replyBtn.count() > 0) {
                 await humanClick(page, replyBtn);
                 commented++;
-                emitLog(`✅ Commentaire #${commented}/${count} publié.`);
+                emitLog(`✅ Commentaire #${commented}/${count} publié sur contenu adulte.`);
             }
             await sleep(randomRange(3000, 8000));
         }
@@ -826,20 +877,32 @@ async function doAutoComment(page: Page, emitLog: (msg: string) => void, config:
         scrollAttempts++;
     }
 
-    emitLog(`✅ Auto-Comment terminé : ${commented} commentaires publiés.`);
+    emitLog(`✅ Auto-Comment terminé : ${commented} commentaires sur contenu adulte.`);
 }
 
 // ─── Auto Post ────────────────────────────────────────────────────────────────
 
 const AUTO_TWEETS = [
-    "Just diving deeper into some amazing Web3 projects today. The space is evolving so fast! 🚀 #Crypto #Web3",
-    "GM everyone! ☀️ Remember that consistency is key in this market. Stay focused!",
-    "The intersection of AI and Blockchain is going to create opportunities we haven't even imagined yet 🧠💻",
-    "Don't ignore the fundamentals. The noise will fade, but the tech stays 🛠️",
-    "What's your favorite ecosystem right now and why? Looking to expand my horizons 👇",
-    "Every bear market is just the universe preparing you for the next bull run. Stay humble, stay building.",
-    "The builders who show up every day will be the winners. Simple as that.",
-    "Not financial advice, but I'm long on the future of decentralized everything. 🌐",
+    "Just subscribed to the hottest OF creators 🔥😈 Who should I check next?",
+    "Late night jerking session with some premium content 💦😍",
+    "OnlyFans has the best pussy on the internet 🍑💦 Facts.",
+    "Looking for new sluts to follow. Drop your OF links! 😈🔥",
+    "My dick is tired but my eyes aren't 😍💦 #OnlyFans",
+    "Just found the perfect creampie material 🍑💦😈",
+    "Who else is addicted to NSFW Twitter? 🙋‍♂️🔥",
+    "These OF girls know exactly what we want 😍🍆💦",
+    "Jerking off to premium content > free porn any day 💦😈",
+    "Need more thick girls with big asses in my feed 🍑🔥",
+    "Just blew my load to an amazing OF creator 💦😍 Worth every penny",
+    "The titties on Twitter are unmatched today 🍒🔥😍",
+    "POV: You found the perfect OnlyFans babe 😈💋",
+    "My OnlyFans bill is huge but I don't care 😍💦🔥",
+    "Looking for girls who actually show everything 😈🍑 No teasers!",
+    "Just tipped $100 for exclusive content 💦😍 So fucking worth it",
+    "Thick thighs and big tits save lives 🍒🍑🔥",
+    "Who wants to be my personal cam girl? 😈💦",
+    "Twitter NSFW > Instagram any day 🔥😍 No censorship!",
+    "Just discovered the horniest corner of Twitter 😍🍆💦",
 ];
 
 async function doAutoPost(page: Page, emitLog: (msg: string) => void, config: any) {
@@ -1147,9 +1210,33 @@ export const twitterWorkerHandler = async (job: any) => {
     try {
         let isAuthenticated = false;
 
-        // ── Try to restore session from cookies ──
-        if (existingSession && sessionManager.isSessionValid(existingSession) && existingSession.cookies.length > 0) {
-            emitLog("🍪 Chargement des cookies de session...");
+        // ── PRIORITY 1: Try to restore session from cookies ──
+        if (account.sessionCookies && Array.isArray(account.sessionCookies) && account.sessionCookies.length > 0) {
+            emitLog("🍪 Connexion par cookies uniquement...");
+            emitLog(`📋 ${account.sessionCookies.length} cookies chargés`);
+            
+            // Check if we have both auth_token and ct0
+            const hasAuthToken = account.sessionCookies.some((c: any) => c.name === 'auth_token');
+            const hasCt0 = account.sessionCookies.some((c: any) => c.name === 'ct0');
+            
+            if (!hasAuthToken) {
+                emitLog("❌ Cookie auth_token manquant!");
+            } else if (!hasCt0) {
+                emitLog("⚠️ Cookie ct0 manquant - Peut causer des problèmes");
+            }
+            
+            await context.addCookies(account.sessionCookies as any);
+            isAuthenticated = await validateSession(page, emitLog);
+            
+            if (!isAuthenticated) {
+                emitLog("❌ Cookies invalides ou expirés");
+                emitLog("💡 Veuillez mettre à jour les cookies depuis votre navigateur");
+                await context.clearCookies();
+            } else {
+                emitLog("✅ Connexion réussie avec les cookies!");
+            }
+        } else if (existingSession && sessionManager.isSessionValid(existingSession) && existingSession.cookies.length > 0) {
+            emitLog("🍪 Chargement des cookies de session locale...");
             await context.addCookies(existingSession.cookies);
             isAuthenticated = await validateSession(page, emitLog);
 
@@ -1158,36 +1245,19 @@ export const twitterWorkerHandler = async (job: any) => {
                 await sessionManager.deleteSession(username);
                 await context.clearCookies();
             }
-        } else if (account.sessionCookies && Array.isArray(account.sessionCookies) && account.sessionCookies.length > 0) {
-            emitLog("🍪 Chargement des cookies DB...");
-            await context.addCookies(account.sessionCookies as any);
-            isAuthenticated = await validateSession(page, emitLog);
-            if (!isAuthenticated) {
-                await context.clearCookies();
-            }
         }
 
-        // ── Manual login if session is not valid ──
+        // ── If cookies fail, NO manual login - just fail ──
         if (!isAuthenticated) {
-            const success = await doManualLogin(page, context, account, emitLog);
-            if (!success) {
-                await prisma.twitterAccount.update({ where: { id: accountId }, data: { status: 'CHECKPOINT' } });
-                throw new Error("Authentification Impossible - délai expiré");
-            }
-
-            // Save new session
-            const cookies = await context.cookies();
-            const newSession: SessionData = {
-                cookies,
-                localStorage: {},
-                sessionStorage: {},
-                fingerprint,
-                deviceInfo,
-                createdAt: new Date().toISOString(),
-                lastUsed: new Date().toISOString(),
-            };
-            await sessionManager.saveSession(username, newSession);
-            emitLog("💾 Session sauvegardée pour les prochaines actions automatiques.");
+            emitLog("❌ AUTHENTIFICATION IMPOSSIBLE - Cookies invalides ou manquants");
+            emitLog("💡 Solution:");
+            emitLog("   1. Connectez-vous à x.com dans votre navigateur");
+            emitLog("   2. F12 → Application → Cookies → x.com");
+            emitLog("   3. Copiez TOUS les cookies");
+            emitLog("   4. Utilisez update_cookies.js pour les ajouter");
+            
+            await prisma.twitterAccount.update({ where: { id: accountId }, data: { status: 'CHECKPOINT' } });
+            throw new Error("Cookies invalides ou manquants - Mise à jour requise");
         }
 
         // ── Execute action ──

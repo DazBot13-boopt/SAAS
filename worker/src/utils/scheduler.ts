@@ -40,9 +40,12 @@ class TwitterScheduler {
         try {
             const now = new Date();
             
-            // Get all active Twitter accounts
+            // First: Check and schedule group-based actions
+            await this.scheduleGroupActions(now);
+            
+            // Second: Check and schedule individual account actions
             const accounts = await prisma.twitterAccount.findMany({
-                where: { status: 'ACTIVE' },
+                where: { status: 'ACTIVE', groupId: null }, // Only accounts without group
                 include: { proxy: true }
             });
 
@@ -52,6 +55,111 @@ class TwitterScheduler {
         } catch (error) {
             console.error('Scheduler error:', error);
         }
+    }
+
+    private async scheduleGroupActions(now: Date) {
+        try {
+            // Get all active groups
+            const groups = await prisma.accountGroup.findMany({
+                where: { isActive: true },
+                include: { 
+                    accounts: {
+                        where: { status: 'ACTIVE' }
+                    }
+                }
+            });
+
+            for (const group of groups) {
+                // Check if group has a schedule and if it's time to run
+                if (group.schedule && !this.shouldRunSchedule(group.schedule, now)) {
+                    continue;
+                }
+
+                // Get accounts in this group
+                const accounts = group.accounts;
+                if (accounts.length === 0) continue;
+
+                // Check if enough time passed since last group action
+                const lastActionTime = group.updatedAt ? new Date(group.updatedAt).getTime() : 0;
+                const timeSinceLastAction = now.getTime() - lastActionTime;
+                const minInterval = 30 * 60 * 1000; // 30 minutes
+                
+                if (timeSinceLastAction < minInterval) continue;
+
+                // Execute group task for all accounts
+                const taskType = group.taskType;
+                console.log(`📁 Scheduling group task "${group.name}" (${taskType}) for ${accounts.length} accounts`);
+
+                for (const account of accounts) {
+                    // Check if account already has pending job
+                    const jobs = await this.queue.getJobs(['waiting', 'active']);
+                    const hasPendingJob = jobs.some(j => j.data.accountId === account.id);
+                    
+                    if (hasPendingJob) continue;
+
+                    // Add job to queue
+                    const delay = Math.random() * 5 * 60 * 1000; // 0-5 min random delay
+                    
+                    await this.queue.add(
+                        `group-${group.id}-${taskType}-${account.username}`,
+                        {
+                            accountId: account.id,
+                            action: this.mapTaskTypeToAction(taskType),
+                            config: this.getActionConfig(this.mapTaskTypeToAction(taskType)),
+                            groupId: group.id,
+                            groupName: group.name
+                        },
+                        {
+                            delay: Math.floor(delay),
+                            attempts: 2,
+                            backoff: { type: 'exponential', delay: 60000 }
+                        }
+                    );
+                }
+
+                // Update group's updatedAt
+                await prisma.accountGroup.update({
+                    where: { id: group.id },
+                    data: { updatedAt: now }
+                });
+            }
+        } catch (error) {
+            console.error('Group scheduling error:', error);
+        }
+    }
+
+    private shouldRunSchedule(schedule: any, now: Date): boolean {
+        // If no schedule, always run
+        if (!schedule) return true;
+
+        const hour = now.getHours();
+        const dayOfWeek = now.getDay();
+
+        // Check days of week
+        if (schedule.days && !schedule.days.includes(dayOfWeek)) {
+            return false;
+        }
+
+        // Check time range
+        if (schedule.startTime !== undefined && schedule.endTime !== undefined) {
+            if (hour < schedule.startTime || hour >= schedule.endTime) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private mapTaskTypeToAction(taskType: string): string {
+        const mapping: Record<string, string> = {
+            'warmup': 'warmUp',
+            'posting': 'autoPost',
+            'commenting': 'autoComment',
+            'engagement': 'autoLike',
+            'following': 'autoFollow',
+            'retweeting': 'autoRetweet'
+        };
+        return mapping[taskType] || 'warmUp';
     }
 
     private async scheduleForAccount(account: any, now: Date) {
@@ -108,26 +216,34 @@ class TwitterScheduler {
     }
 
     private selectAction(hour: number, dayOfWeek: number): string | null {
-        // Don't run actions during night hours (1am - 6am)
-        if (hour >= 1 && hour <= 6) return null;
+        // Don't run actions during night hours (2am - 7am)
+        if (hour >= 2 && hour <= 7) return null;
 
         const actions = [
-            { name: 'warmUp', weight: 30 },
-            { name: 'autoLike', weight: 25 },
+            { name: 'warmUp', weight: 25 },
+            { name: 'autoLike', weight: 30 },
+            { name: 'autoFollow', weight: 20 },
             { name: 'autoComment', weight: 15 },
-            { name: 'autoRetweet', weight: 15 },
-            { name: 'autoFollow', weight: 10 },
+            { name: 'autoRetweet', weight: 5 },
             { name: 'autoPost', weight: 5 },
         ];
 
-        // Adjust weights based on time
-        if (hour >= 9 && hour <= 17) {
-            // Business hours - more professional actions
+        // Adjust weights based on time - OnlyFans/Adult content strategy
+        if (hour >= 20 || hour <= 1) {
+            // Evening/Night - Peak time for adult content engagement
+            actions.find(a => a.name === 'autoLike')!.weight += 15;
             actions.find(a => a.name === 'autoFollow')!.weight += 10;
-        } else {
-            // Evening - more engagement actions
-            actions.find(a => a.name === 'autoLike')!.weight += 10;
             actions.find(a => a.name === 'autoComment')!.weight += 5;
+        } else if (hour >= 12 && hour <= 16) {
+            // Afternoon - Good for engagement
+            actions.find(a => a.name === 'autoComment')!.weight += 10;
+            actions.find(a => a.name === 'autoPost')!.weight += 5;
+        }
+
+        // Weekend - More aggressive engagement
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            actions.find(a => a.name === 'autoLike')!.weight += 10;
+            actions.find(a => a.name === 'autoFollow')!.weight += 10;
         }
 
         // Random selection based on weights
@@ -145,16 +261,16 @@ class TwitterScheduler {
     private getActionConfig(action: string): any {
         switch (action) {
             case 'autoLike':
-                return { count: Math.floor(Math.random() * 5) + 3 }; // 3-8 likes
+                return { count: Math.floor(Math.random() * 8) + 5 }; // 5-12 likes
             case 'autoFollow':
                 return { 
-                    keyword: ['crypto', 'web3', 'blockchain', 'defi', 'nft'][Math.floor(Math.random() * 5)],
-                    count: Math.floor(Math.random() * 3) + 2 // 2-5 follows
+                    keyword: ['onlyfans', 'model', 'babe', 'sexy', 'hot', 'nsfw', 'adult', '18+', 'content creator', 'influencer'][Math.floor(Math.random() * 10)],
+                    count: Math.floor(Math.random() * 5) + 3 // 3-7 follows
                 };
             case 'autoRetweet':
                 return { count: Math.floor(Math.random() * 3) + 1 }; // 1-3 retweets
             case 'autoComment':
-                return { count: Math.floor(Math.random() * 2) + 1 }; // 1-2 comments
+                return { count: Math.floor(Math.random() * 3) + 2 }; // 2-4 comments
             case 'autoPost':
                 return {}; // Uses default tweets
             default:

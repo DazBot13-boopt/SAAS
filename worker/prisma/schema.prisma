@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,14 +8,207 @@ datasource db {
 }
 
 model User {
-  id          String      @id @default(uuid())
-  email       String      @unique
-  password    String
-  subscription String     @default("FREE") // e.g., FREE, PRO, BIZ
-  accounts    IGAccount[]
+  id              String            @id @default(uuid())
+  email           String            @unique
+  password        String
+  subscription    String            @default("FREE")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  groups          AccountGroup[]
+  commentRequests CommentRequest[]
+  templates       ContentTemplate[]
+  accounts        IGAccount[]
+  notifications   Notification[]
   twitterAccounts TwitterAccount[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+}
+
+model IGAccount {
+  id             String        @id @default(uuid())
+  username       String        @unique
+  password       String
+  sessionCookies Json?
+  status         AccountStatus @default(WARM_UP)
+  userId         String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  user           User          @relation(fields: [userId], references: [id])
+  posts          Post[]
+  proxy          Proxy?
+}
+
+model Proxy {
+  id        String    @id @default(uuid())
+  host      String
+  port      Int
+  username  String?
+  password  String?
+  accountId String    @unique
+  account   IGAccount @relation(fields: [accountId], references: [id])
+}
+
+model Post {
+  id           String     @id @default(uuid())
+  videoUrl     String
+  caption      String?
+  scheduleDate DateTime
+  status       PostStatus @default(PENDING)
+  accountId    String
+  createdAt    DateTime   @default(now())
+  account      IGAccount  @relation(fields: [accountId], references: [id])
+}
+
+model ActivityLog {
+  id        String          @id @default(uuid())
+  message   String
+  timestamp DateTime        @default(now())
+  accountId String?
+  action    String
+  details   Json?
+  status    String          @default("SUCCESS")
+  account   TwitterAccount? @relation(fields: [accountId], references: [id])
+}
+
+model TwitterAccount {
+  id             String         @id @default(uuid())
+  username       String         @unique
+  password       String?
+  email          String?
+  emailPassword  String?
+  sessionCookies Json?
+  status         AccountStatus  @default(WARM_UP)
+  type           String         @default("MAIN")
+  userId         String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  bannerImage    String?
+  bio            String?
+  groupId        String?
+  niche          String?
+  profileImage   String?
+  ct0            String?
+  activityLogs   ActivityLog[]
+  banAlerts      BanAlert[]
+  group          AccountGroup?  @relation(fields: [groupId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
+  posts          TwitterPost[]
+  proxy          TwitterProxy?
+  stats          TwitterStats[]
+}
+
+model TwitterProxy {
+  id        String         @id @default(uuid())
+  host      String
+  port      Int
+  username  String?
+  password  String?
+  accountId String         @unique
+  account   TwitterAccount @relation(fields: [accountId], references: [id])
+}
+
+model TwitterPost {
+  id            String         @id @default(uuid())
+  content       String?
+  mediaUrls     String[]
+  scheduleDate  DateTime
+  publishedAt   DateTime?
+  communityName String?
+  isComment     Boolean        @default(false)
+  parentPostUrl String?
+  status        PostStatus     @default(PENDING)
+  likes         Int            @default(0)
+  retweets      Int            @default(0)
+  replies       Int            @default(0)
+  impressions   Int            @default(0)
+  accountId     String
+  createdAt     DateTime       @default(now())
+  account       TwitterAccount @relation(fields: [accountId], references: [id])
+}
+
+model TwitterStats {
+  id               String         @id @default(uuid())
+  accountId        String
+  date             DateTime       @db.Date
+  tweetsPosted     Int            @default(0)
+  likesGiven       Int            @default(0)
+  likesReceived    Int            @default(0)
+  retweetsGiven    Int            @default(0)
+  retweetsReceived Int            @default(0)
+  repliesGiven     Int            @default(0)
+  repliesReceived  Int            @default(0)
+  followsGiven     Int            @default(0)
+  unfollows        Int            @default(0)
+  profileViews     Int            @default(0)
+  followersCount   Int            @default(0)
+  followingCount   Int            @default(0)
+  createdAt        DateTime       @default(now())
+  account          TwitterAccount @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, date])
+}
+
+model AccountGroup {
+  id          String           @id @default(uuid())
+  name        String
+  description String?
+  taskType    String
+  schedule    Json?
+  isActive    Boolean          @default(true)
+  userId      String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id])
+  accounts    TwitterAccount[]
+}
+
+model ContentTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  content   String
+  type      String
+  mediaUrls String[]
+  spinTax   Json?
+  hashtags  String[]
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model CommentRequest {
+  id               String   @id @default(uuid())
+  postId           String
+  postUrl          String
+  totalComments    Int
+  commentsDone     Int      @default(0)
+  status           String   @default("PENDING")
+  assignedAccounts Json?
+  userId           String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id])
+}
+
+model BanAlert {
+  id        String         @id @default(uuid())
+  accountId String
+  alertType String
+  message   String
+  notified  Boolean        @default(false)
+  resolved  Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  account   TwitterAccount @relation(fields: [accountId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 enum AccountStatus {
@@ -28,98 +218,8 @@ enum AccountStatus {
   CHECKPOINT
 }
 
-model IGAccount {
-  id              String        @id @default(uuid())
-  username        String        @unique
-  password        String
-  sessionCookies  Json?         // Store as JSON
-  status          AccountStatus @default(WARM_UP)
-  
-  userId          String
-  user            User          @relation(fields: [userId], references: [id])
-  
-  proxy           Proxy?        // One-to-one relation
-  posts           Post[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-}
-
-model Proxy {
-  id          String    @id @default(uuid())
-  host        String
-  port        Int
-  username    String?
-  password    String?
-  
-  accountId   String    @unique
-  account     IGAccount @relation(fields: [accountId], references: [id])
-}
-
 enum PostStatus {
   PENDING
   PUBLISHED
   FAILED
-}
-
-model Post {
-  id            String      @id @default(uuid())
-  videoUrl      String
-  caption       String?
-  scheduleDate  DateTime
-  status        PostStatus  @default(PENDING)
-  
-  accountId     String
-  account       IGAccount   @relation(fields: [accountId], references: [id])
-  createdAt     DateTime    @default(now())
-}
-
-model ActivityLog {
-  id        String   @id @default(uuid())
-  message   String
-  timestamp DateTime @default(now())
-}
-
-model TwitterAccount {
-  id              String        @id @default(uuid())
-  username        String        @unique
-  password        String
-  email           String?
-  emailPassword   String?
-  sessionCookies  Json?         // Store as JSON
-  status          AccountStatus @default(WARM_UP)
-  type            String        @default("MAIN") // MAIN or SUPPORT
-  
-  userId          String
-  user            User          @relation(fields: [userId], references: [id])
-  
-  proxy           TwitterProxy?        // One-to-one relation
-  posts           TwitterPost[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-}
-
-model TwitterProxy {
-  id          String    @id @default(uuid())
-  host        String
-  port        Int
-  username    String?
-  password    String?
-  
-  accountId   String    @unique
-  account     TwitterAccount @relation(fields: [accountId], references: [id])
-}
-
-model TwitterPost {
-  id            String      @id @default(uuid())
-  content       String?
-  mediaUrls     String[]    // Array of image URLs
-  scheduleDate  DateTime
-  communityName String?     // The name or ID of the community
-  isComment     Boolean     @default(false)
-  parentPostUrl String?     // If comment, the URL of the post to comment on
-  status        PostStatus  @default(PENDING)
-  
-  accountId     String
-  account       TwitterAccount @relation(fields: [accountId], references: [id])
-  createdAt     DateTime    @default(now())
 }

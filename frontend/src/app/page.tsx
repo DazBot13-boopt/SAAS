@@ -31,9 +31,19 @@ import {
     Repeat,
     Eye,
     UserPlus,
-    Clock
+    Clock,
+    FolderTree,
+    FileText,
+    Bell,
+    AlertTriangle,
+    UserCircle,
+    Target,
+    Share2,
+    Settings,
+    Edit
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import NewFeatures from '../components/NewFeatures';
 
 // --- Types ---
 interface Account {
@@ -45,6 +55,68 @@ interface Account {
     type?: string;
     email?: string;
     proxy?: { host: string; port: number; username?: string; password?: string };
+    profileImage?: string;
+    bio?: string;
+    bannerImage?: string;
+    niche?: string;
+    groupId?: string;
+}
+
+interface Group {
+    id: string;
+    name: string;
+    description?: string;
+    taskType: string;
+    schedule?: any;
+    isActive: boolean;
+    accounts?: Account[];
+}
+
+interface Template {
+    id: string;
+    name: string;
+    content: string;
+    type: string;
+    mediaUrls: string[];
+    hashtags: string[];
+}
+
+interface Activity {
+    id: string;
+    accountId?: string;
+    action: string;
+    message: string;
+    details?: any;
+    status: string;
+    timestamp: string;
+}
+
+interface CommentRequest {
+    id: string;
+    postId: string;
+    postUrl: string;
+    totalComments: number;
+    commentsDone: number;
+    status: string;
+}
+
+interface BanAlert {
+    id: string;
+    accountId: string;
+    account?: Account;
+    alertType: string;
+    message: string;
+    notified: boolean;
+    resolved: boolean;
+}
+
+interface Notification {
+    id: string;
+    type: string;
+    title: string;
+    message: string;
+    read: boolean;
+    createdAt: string;
 }
 
 export default function Dashboard() {
@@ -53,10 +125,11 @@ export default function Dashboard() {
     const [screenshots, setScreenshots] = useState<Record<string, string>>({});
     const [activeAccount, setActiveAccount] = useState('');
     const [viewMode, setViewMode] = useState<'SINGLE' | 'GRID' | 'PROXIES' | 'ACCOUNTS' | 'POSTS' | 'STATS'>('SINGLE');
-    const [platform, setPlatform] = useState<'INSTAGRAM' | 'TWITTER'>('INSTAGRAM');
+    const [platform, setPlatform] = useState<'INSTAGRAM' | 'TWITTER'>('TWITTER');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showTokenGuide, setShowTokenGuide] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [showNewFeatures, setShowNewFeatures] = useState(false);
 
     // Posts & Stats State
     const [posts, setPosts] = useState<any[]>([]);
@@ -70,6 +143,27 @@ export default function Dashboard() {
         proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', 
         type: 'MAIN', authToken: '' 
     });
+    const [twitterCookies, setTwitterCookies] = useState('');
+    const [twitterCt0, setTwitterCt0] = useState('');
+
+    // New Features State
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'groups' | 'templates' | 'activities' | 'comments' | 'notifications'>('dashboard');
+    const [groups, setGroups] = useState<Group[]>([]);
+    const [templates, setTemplates] = useState<Template[]>([]);
+    const [activities, setActivities] = useState<Activity[]>([]);
+    const [commentRequests, setCommentRequests] = useState<CommentRequest[]>([]);
+    const [banAlerts, setBanAlerts] = useState<BanAlert[]>([]);
+    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [showGroupModal, setShowGroupModal] = useState(false);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [showCommentModal, setShowCommentModal] = useState(false);
+    const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+    const [newGroup, setNewGroup] = useState({ name: '', description: '', taskType: 'warmup' });
+    const [newTemplate, setNewTemplate] = useState({ name: '', content: '', type: 'post', hashtags: '' });
+    const [newCommentRequest, setNewCommentRequest] = useState({ postUrl: '', totalComments: 0 });
+    const [profileForm, setProfileForm] = useState({ profileImage: '', bio: '', bannerImage: '', niche: '' });
+    const [unreadNotifications, setUnreadNotifications] = useState(0);
 
     useEffect(() => {
         setMounted(true);
@@ -192,6 +286,41 @@ export default function Dashboard() {
         e.preventDefault();
         const url = platform === 'TWITTER' ? 'http://localhost:4000/api/twitter-accounts' : 'http://localhost:4000/api/accounts';
         try {
+            // For Twitter, build cookies array from simple input values
+            let cookiesArray = undefined;
+            if (platform === 'TWITTER') {
+                if (!twitterCookies.trim()) {
+                    alert('Erreur: Le cookie auth_token est requis');
+                    return;
+                }
+                
+                // Build the cookies array automatically
+                cookiesArray = [
+                    {
+                        name: 'auth_token',
+                        value: twitterCookies.trim(),
+                        domain: '.x.com',
+                        path: '/',
+                        secure: true,
+                        httpOnly: true,
+                        sameSite: 'Lax'
+                    }
+                ];
+
+                // Add ct0 if provided
+                if (twitterCt0.trim()) {
+                    cookiesArray.push({
+                        name: 'ct0',
+                        value: twitterCt0.trim(),
+                        domain: '.x.com',
+                        path: '/',
+                        secure: true,
+                        httpOnly: false,
+                        sameSite: 'Lax'
+                    });
+                }
+            }
+
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -200,6 +329,9 @@ export default function Dashboard() {
                     password: newAcc.password,
                     email: newAcc.email,
                     type: newAcc.type,
+                    // Twitter cookie-only authentication
+                    cookies: cookiesArray,
+                    // Legacy support (will be ignored for Twitter)
                     authToken: newAcc.authToken || undefined,
                     proxy: newAcc.proxyHost ? { 
                         host: newAcc.proxyHost, 
@@ -217,6 +349,8 @@ export default function Dashboard() {
             
             setShowAddModal(false);
             setNewAcc({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', type: 'MAIN', authToken: '' });
+            setTwitterCookies('');
+            setTwitterCt0('');
             fetchAccounts(platform);
         } catch (error: any) {
             alert(`Erreur: ${error.message}`);
@@ -261,6 +395,22 @@ export default function Dashboard() {
     };
 
     const activeAccObj = accounts.find(a => a.username === activeAccount);
+
+    // Show new features page
+    if (showNewFeatures) {
+        return (
+            <div className="relative">
+                <button
+                    onClick={() => setShowNewFeatures(false)}
+                    className="fixed top-4 left-4 z-50 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-700"
+                >
+                    <LayoutDashboard className="w-4 h-4" />
+                    Retour au Dashboard
+                </button>
+                <NewFeatures accounts={accounts} />
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-screen bg-[#030303] text-white font-sans selection:bg-violet-500/30 overflow-hidden font-light">
@@ -313,6 +463,10 @@ export default function Dashboard() {
                     )}
                     
                     <div className="w-8 h-[1px] bg-white/10 my-2" />
+
+                    <SidebarIcon icon={<FolderTree size={22} />} active={showNewFeatures} onClick={() => setShowNewFeatures(true)} title="🌟 Fonctionnalités Avancées - Groupes, Templates, Stats" />
+
+                    <div className="w-8 h-[1px] bg-gradient-to-r from-blue-500 to-purple-500 my-2 rounded-full" />
 
                     <motion.button 
                         whileHover={{ scale: 1.1 }}
@@ -379,6 +533,13 @@ export default function Dashboard() {
 
                             <div className="flex items-center justify-between mb-4 mt-8">
                                 <h3 className="text-lg font-medium text-white/90">Managed Nodes</h3>
+                                <button
+                                    onClick={() => setShowNewFeatures(true)}
+                                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-lg shadow-blue-600/20"
+                                >
+                                    <FolderTree size={16} />
+                                    Fonctionnalités Avancées
+                                </button>
                             </div>
 
                             {/* Account Grid List */}
@@ -391,6 +552,16 @@ export default function Dashboard() {
                                             active={activeAccount === acc.username}
                                             onClick={() => setActiveAccount(acc.username)}
                                             onLaunch={(action) => launchAction(acc.id, action)}
+                                            onEditProfile={() => {
+                                                setSelectedAccount(acc);
+                                                setProfileForm({
+                                                    profileImage: acc.profileImage || '',
+                                                    bio: acc.bio || '',
+                                                    bannerImage: acc.bannerImage || '',
+                                                    niche: acc.niche || ''
+                                                });
+                                                setShowProfileModal(true);
+                                            }}
                                             index={i}
                                             platform={platform}
                                         />
@@ -857,8 +1028,14 @@ export default function Dashboard() {
                                 <X size={16} />
                             </button>
                             
-                            <h3 className="text-2xl font-semibold mb-2">Deploy Instance</h3>
-                            <p className="text-sm text-white/40 mb-8">Link a new Instagram account to the orchestration network.</p>
+                            <h3 className="text-2xl font-semibold mb-2">
+                                {platform === 'TWITTER' ? 'Add Twitter Account' : 'Deploy Instance'}
+                            </h3>
+                            <p className="text-sm text-white/40 mb-8">
+                                {platform === 'TWITTER' 
+                                    ? 'Connectez un compte Twitter avec les cookies d\'authentification.' 
+                                    : 'Link a new Instagram account to the orchestration network.'}
+                            </p>
                             
                             <div className="space-y-5">
                                 <div className="grid grid-cols-2 gap-4">
@@ -868,43 +1045,74 @@ export default function Dashboard() {
 
                                 {platform === 'TWITTER' && (
                                     <>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <Input label="Email Outlook" type="email" value={newAcc.email} onChange={(v: string) => setNewAcc({ ...newAcc, email: v })} />
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Account Role</label>
-                                                <div className="relative">
-                                                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><Briefcase size={16} /></div>
-                                                    <select 
-                                                        value={newAcc.type} 
-                                                        onChange={(e) => setNewAcc({...newAcc, type: e.target.value})}
-                                                        className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
-                                                    >
-                                                        <option value="MAIN">MAIN (Model)</option>
-                                                        <option value="SUPPORT">SUPPORT (Spammer)</option>
-                                                    </select>
-                                                </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Account Role</label>
+                                            <div className="relative">
+                                                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><Briefcase size={16} /></div>
+                                                <select 
+                                                    value={newAcc.type} 
+                                                    onChange={(e) => setNewAcc({...newAcc, type: e.target.value})}
+                                                    className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
+                                                >
+                                                    <option value="MAIN">MAIN (Model)</option>
+                                                    <option value="SUPPORT">SUPPORT (Spammer)</option>
+                                                </select>
                                             </div>
                                         </div>
-                                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-2">
-                                            <p className="text-xs text-amber-400">
-                                                ⚠️ <strong>Important:</strong> L'email est requis pour la vérification de sécurité automatique.
-                                            </p>
-                                        </div>
-                                        <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-2xl mb-4">
+
+                                        <div className="p-4 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-2xl space-y-4">
                                             <div className="flex items-start justify-between mb-2">
-                                                <Input label="Auth Token (Cookie) - SKIP LOGIN" value={newAcc.authToken} onChange={(v: string) => setNewAcc({ ...newAcc, authToken: v })} placeholder="e.g. 1a2b3c4d5e..." />
+                                                <h4 className="text-sm font-semibold text-blue-400">🍪 Cookie Authentication</h4>
                                                 <button
                                                     type="button"
                                                     onClick={() => setShowTokenGuide(true)}
-                                                    className="ml-2 p-2 bg-violet-500/20 hover:bg-violet-500/30 rounded-lg transition-colors shrink-0"
-                                                    title="Comment obtenir mon Auth Token?"
+                                                    className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg transition-colors shrink-0"
+                                                    title="Comment extraire les cookies?"
                                                 >
-                                                    <HelpCircle size={18} className="text-violet-400" />
+                                                    <HelpCircle size={18} className="text-blue-400" />
                                                 </button>
                                             </div>
-                                            <p className="text-[10px] text-violet-300 mt-1">
-                                                💡 Recommandé: Skippe l'étape de connexion automatique
-                                            </p>
+                                            
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-blue-300 mb-1 block">
+                                                        Auth Token <span className="text-red-400">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={twitterCookies}
+                                                        onChange={(e) => setTwitterCookies(e.target.value)}
+                                                        placeholder="Collez la valeur du cookie auth_token ici"
+                                                        className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-sm text-white/90 focus:bg-white/[0.02] transition-all"
+                                                        required
+                                                    />
+                                                    <p className="text-[10px] text-blue-400/60 mt-1">
+                                                        F12 → Application → Cookies → auth_token → Copier la valeur
+                                                    </p>
+                                                </div>
+
+                                                <div>
+                                                    <label className="text-[11px] font-medium text-blue-300 mb-1 block">
+                                                        CT0 (CSRF Token) <span className="text-slate-500">(optionnel)</span>
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={twitterCt0}
+                                                        onChange={(e) => setTwitterCt0(e.target.value)}
+                                                        placeholder="Collez la valeur du cookie ct0 ici"
+                                                        className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-sm text-white/90 focus:bg-white/[0.02] transition-all"
+                                                    />
+                                                    <p className="text-[10px] text-blue-400/60 mt-1">
+                                                        F12 → Application → Cookies → ct0 → Copier la valeur
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-3 bg-blue-900/20 border border-blue-500/20 rounded-lg">
+                                                <p className="text-[10px] text-blue-300">
+                                                    💡 <strong>Requis:</strong> auth_token uniquement. CT0 est recommandé pour les requêtes API.
+                                                </p>
+                                            </div>
                                         </div>
                                     </>
                                 )}
@@ -1308,7 +1516,7 @@ function SidebarIcon({ icon, active, onClick, title }: { icon: any, active?: boo
     );
 }
 
-function AccountCard({ account, active, onClick, onLaunch, index, platform }: { account: Account, active: boolean, onClick: () => void, onLaunch: (action: string) => void, index: number, platform: string }) {
+function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index, platform }: { account: Account, active: boolean, onClick: () => void, onLaunch: (action: string) => void, onEditProfile: () => void, index: number, platform: string }) {
     const statusTheme = getStatusColor(account.status);
     
     // Actions mapping depending on platform
@@ -1349,14 +1557,24 @@ function AccountCard({ account, active, onClick, onLaunch, index, platform }: { 
                     </div>
                 </div>
                 
-                <div className="relative">
+                <div className="flex gap-2">
+                    {/* Edit Profile Button */}
                     <button 
-                        onClick={(e) => { e.stopPropagation(); setShowActions(!showActions); }} 
-                        className="p-2.5 bg-white/5 text-white/60 rounded-xl hover:bg-white hover:text-black transition-all shadow-sm shrink-0 flex items-center gap-1"
-                        title="Run Action"
+                        onClick={(e) => { e.stopPropagation(); onEditProfile(); }} 
+                        className="p-2.5 bg-white/5 text-white/60 rounded-xl hover:bg-blue-500/20 hover:text-blue-400 transition-all shadow-sm shrink-0 flex items-center gap-1"
+                        title="Edit Profile"
                     >
-                        <Play size={16} fill="currentColor" />
+                        <Edit size={16} />
                     </button>
+                    
+                    <div className="relative">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setShowActions(!showActions); }} 
+                            className="p-2.5 bg-white/5 text-white/60 rounded-xl hover:bg-white hover:text-black transition-all shadow-sm shrink-0 flex items-center gap-1"
+                            title="Run Action"
+                        >
+                            <Play size={16} fill="currentColor" />
+                        </button>
                     <AnimatePresence>
                         {showActions && (
                             <motion.div 
@@ -1385,6 +1603,7 @@ function AccountCard({ account, active, onClick, onLaunch, index, platform }: { 
                             </motion.div>
                         )}
                     </AnimatePresence>
+                    </div>
                 </div>
             </div>
 

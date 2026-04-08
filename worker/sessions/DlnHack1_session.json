@@ -12,20 +12,20 @@
     },
     {
       "name": "guest_id_ads",
-      "value": "v1%3A177560256232655132",
+      "value": "v1%3A177565729142911380",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810204404.602259,
+      "expires": 1810217300.566772,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "guest_id_marketing",
-      "value": "v1%3A177560256232655132",
+      "value": "v1%3A177565729142911380",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810204404.602368,
+      "expires": 1810217300.566981,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -42,20 +42,20 @@
     },
     {
       "name": "personalization_id",
-      "value": "\"v1_Bxmwz3pOLufNUnvz2fqn1g==\"",
+      "value": "\"v1_4Vw3KWITXwGSktTv7KN8gA==\"",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810162559.919588,
+      "expires": 1810217287.691153,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "guest_id",
-      "value": "v1%3A177560256232655132",
+      "value": "v1%3A177565729142911380",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810162559.919659,
+      "expires": 1810217287.691196,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -65,39 +65,39 @@
       "value": "u%3D2041542227000750080",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1807180404.602411,
+      "expires": 1807193300.56708,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "ct0",
-      "value": "ac74538c24e5c88c0576b6f97fe5061951ba975d3355a384c808ef2be1337f9bbf108fe74d3ff2038da636adc02e6753bdb688ed66c9ec3c73ff7d5ec5d01ce2e266cd8abdedd59636dfcb1225312c41",
+      "value": "ea219b64bf88742376f638c86d5d5b23891d4f7415e4a62d4ee8bda0f5bc1dea9a7e218ec3416c47a9e7ec5ed2de40535311c22ef650303f2a6acef0bfd5e9ac2a6e12dadf7ea222627b3ff712133892",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810162559.919808,
+      "expires": 1810217287.691283,
       "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__cf_bm",
+      "value": "3mXDhO2hB7CBJTD..1Mkynze3BdYEzhrWcmd1jKDJQY-1775657291.3611937-1.0.1.1-ZveJaYRVFBnY.GaHgpzZ2ngp3_Vj92pVxahhGfj9Y7Iqw8MF6mWnmW7K4WScSnTB55pYQc1WsGF5rqDSlf5ClCvfqd6ZynLxX0PyW6V6FGNsIrtT4uiOyPEtY9udbdq7",
+      "domain": ".x.com",
+      "path": "/",
+      "expires": 1775659087.691347,
+      "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
     },
     {
       "name": "__cuid",
-      "value": "5e4b07cc29374f73ab6324626ad01179",
+      "value": "8a81267f9e6e43c5bbe4868795748d98",
       "domain": ".x.com",
       "path": "/",
-      "expires": 1810204408,
+      "expires": 1810217305,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "__cf_bm",
-      "value": "WngN9UZH_ZKRtU4gkfqXNIb83K.DmcYf_izidUtAcB0-1775644384.4719439-1.0.1.1-x8afu2da7mwSs5LT8t64bAKXnIlClQcBy90IW8hbalW9sRAAn9PzQ0wOkpjV_DbvUypdWtB_RpN0FQs0RygZjQZkYndLhzgLyvizWLYZqpy1J21tyblXNEGaU5hi9AD7",
-      "domain": ".x.com",
-      "path": "/",
-      "expires": 1775646184.947616,
-      "httpOnly": true,
-      "secure": true,
       "sameSite": "Lax"
     }
   ],
@@ -111,16 +111,16 @@
       "pageYOffset": 0,
       "screenX": 0,
       "hasHDR": true,
-      "width": 393,
-      "height": 852,
-      "availWidth": 393,
-      "availHeight": 852,
+      "width": 440,
+      "height": 956,
+      "availWidth": 440,
+      "availHeight": 956,
       "clientWidth": 0,
       "clientHeight": 20,
       "innerWidth": 0,
       "innerHeight": 0,
-      "outerWidth": 393,
-      "outerHeight": 852,
+      "outerWidth": 440,
+      "outerHeight": 884,
       "colorDepth": 24,
       "pixelDepth": 24,
       "devicePixelRatio": 3
@@ -295,6 +295,6 @@
     "deviceScaleFactor": 3,
     "platform": "iPhone"
   },
-  "createdAt": "2026-04-07T22:55:58.041Z",
-  "lastUsed": "2026-04-08T10:34:14.264Z"
+  "createdAt": "2026-04-08T12:11:28.385Z",
+  "lastUsed": "2026-04-08T14:08:59.694Z"
 }
