@@ -12,6 +12,20 @@ dotenv.config();
 
 const prisma = new PrismaClient();
 const socket = io(process.env.BACKEND_SOCKET_URL || 'http://saas-backend:4000');
+
+// Log socket connection status
+socket.on('connect', () => {
+    console.log(`✅ Socket connected to backend: ${socket.id}`);
+});
+
+socket.on('disconnect', () => {
+    console.log(`❌ Socket disconnected from backend`);
+});
+
+socket.on('connect_error', (error) => {
+    console.error(`❌ Socket connection error: ${error.message}`);
+});
+
 chromium.use(stealth());
 
 const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {

@@ -748,11 +748,7 @@ export default function Dashboard() {
 
                                         {screenshots[activeAccount] ? (
                                             <div className="w-full h-full flex items-center justify-center bg-black/20">
-                                                <motion.img 
-                                                    key={activeAccount}
-                                                    initial={{ opacity: 0 }} 
-                                                    animate={{ opacity: 1 }}
-                                                    transition={{ duration: 0.3 }}
+                                                <img 
                                                     src={screenshots[activeAccount]} 
                                                     alt={`Live screenshot of @${activeAccount}`}
                                                     className="w-full h-full object-contain" 
@@ -802,7 +798,7 @@ export default function Dashboard() {
                                                 logs.filter(l => l.username === activeAccount).map((l, i) => (
                                                     <motion.div 
                                                         initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }}
-                                                        key={i} 
+                                                        key={`${l.username}-${l.timestamp?.getTime()}-${i}`}
                                                         className="text-white/60 tracking-tight leading-relaxed break-words"
                                                     >
                                                         <span className="text-white/30 mr-2">[{l.timestamp?.toLocaleTimeString([], {hour12: false}) || '00:00:00'}]</span>

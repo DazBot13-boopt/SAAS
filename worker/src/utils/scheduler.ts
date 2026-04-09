@@ -261,16 +261,16 @@ class TwitterScheduler {
     private getActionConfig(action: string): any {
         switch (action) {
             case 'autoLike':
-                return { count: Math.floor(Math.random() * 8) + 5 }; // 5-12 likes
+                return { count: Math.floor(Math.random() * 4) + 3 }; // 3-6 likes (reduced from 5-12)
             case 'autoFollow':
                 return { 
                     keyword: ['onlyfans', 'model', 'babe', 'sexy', 'hot', 'nsfw', 'adult', '18+', 'content creator', 'influencer'][Math.floor(Math.random() * 10)],
-                    count: Math.floor(Math.random() * 5) + 3 // 3-7 follows
+                    count: Math.floor(Math.random() * 3) + 2 // 2-4 follows (reduced from 3-7)
                 };
             case 'autoRetweet':
-                return { count: Math.floor(Math.random() * 3) + 1 }; // 1-3 retweets
+                return { count: Math.floor(Math.random() * 2) + 1 }; // 1-2 retweets (reduced from 1-3)
             case 'autoComment':
-                return { count: Math.floor(Math.random() * 3) + 2 }; // 2-4 comments
+                return { count: Math.floor(Math.random() * 2) + 1 }; // 1-2 comments (reduced from 2-4)
             case 'autoPost':
             case 'postCommunity':
                 // OnlyFans promotional posts with links
