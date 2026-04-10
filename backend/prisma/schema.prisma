@@ -11,23 +11,18 @@ model User {
   id                    String            @id @default(uuid())
   email                 String            @unique
   password              String
-  role                  UserRole          @default(USER)
-  isActive              Boolean           @default(false)
-  subscriptionExpiresAt DateTime?
   subscription          String            @default("FREE")
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
+  isActive              Boolean           @default(false)
+  role                  UserRole          @default(USER)
+  subscriptionExpiresAt DateTime?
   groups                AccountGroup[]
   commentRequests       CommentRequest[]
   templates             ContentTemplate[]
   accounts              IGAccount[]
   notifications         Notification[]
   twitterAccounts       TwitterAccount[]
-}
-
-enum UserRole {
-  ADMIN
-  USER
 }
 
 model IGAccount {
@@ -217,6 +212,11 @@ model Notification {
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
+}
+
+enum UserRole {
+  ADMIN
+  USER
 }
 
 enum AccountStatus {

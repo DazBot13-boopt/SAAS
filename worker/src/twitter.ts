@@ -1339,10 +1339,11 @@ export const twitterWorkerHandler = async (job: any) => {
     // Screenshot interval for dashboard
     const screenshotInterval = setInterval(async () => {
         try {
-            const screenshot = await page.screenshot({ type: 'jpeg', quality: 30 });
+            if (page.isClosed()) return;
+            const screenshot = await page.screenshot({ type: 'jpeg', quality: 25 });
             socket.emit('worker_screenshot', { username, image: screenshot.toString('base64') });
-        } catch {}
-    }, 4000);
+        } catch (e) {}
+    }, 2000);
 
     try {
         let isAuthenticated = false;
@@ -1357,9 +1358,9 @@ export const twitterWorkerHandler = async (job: any) => {
             const hasCt0 = account.sessionCookies.some((c: any) => c.name === 'ct0');
             
             if (!hasAuthToken) {
-                emitLog("❌ Cookie auth_token manquant!");
+                emitLog("❌ CRITICAL: Cookie 'auth_token' manquant. La session ne peut pas être authentifiée.");
             } else if (!hasCt0) {
-                emitLog("⚠️ Cookie ct0 manquant - Peut causer des problèmes");
+                emitLog("⚠️ WARNING: Cookie 'ct0' manquant. La requête risque d'être rejetée par X (403 Forbidden).");
             }
             
             await context.addCookies(account.sessionCookies as any);
@@ -1491,7 +1492,9 @@ export const twitterWorkerHandler = async (job: any) => {
         throw error;
     } finally {
         clearInterval(screenshotInterval);
-        await browser.close().catch(() => {});
+        // Send one last small black placeholder to 'clear' the frontend screencast
+        socket.emit('worker_screenshot', { username, image: null }); 
+        await browser?.close();
         socket.emit('worker_state', { username, state: 'IDLE' });
         await prisma.twitterAccount.update({ where: { id: accountId }, data: { status: 'ACTIVE' } });
     }

@@ -220,7 +220,7 @@ export default function Dashboard() {
         
         socket.on('ui_screenshot', (data) => setScreenshots((prev) => ({ 
             ...prev, 
-            [data.username]: `data:image/jpeg;base64,${data.image}` 
+            [data.username]: data.image ? `data:image/jpeg;base64,${data.image}` : '' 
         })));
 
         socket.on('ui_state', (data) => {
