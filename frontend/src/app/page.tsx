@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { io } from 'socket.io-client';
 import {
@@ -45,7 +46,18 @@ import {
     Ghost,
     LogOut,
     Crown,
-    Lock
+    Lock,
+    Megaphone,
+    Zap,
+    Layers,
+    Sparkles,
+    Type,
+    Pause,
+    Save,
+    MessageSquare,
+    Link as LinkIcon,
+    Image as ImageIcon,
+    Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NewFeatures from '../components/NewFeatures';
@@ -65,6 +77,7 @@ interface Account {
     bannerImage?: string;
     niche?: string;
     groupId?: string;
+    autoMode?: boolean;
 }
 
 interface Group {
@@ -129,7 +142,13 @@ export default function Dashboard() {
     const [logs, setLogs] = useState<{ username: string, message: string, timestamp?: Date }[]>([]);
     const [screenshots, setScreenshots] = useState<Record<string, string>>({});
     const [activeAccount, setActiveAccount] = useState('');
-    const [viewMode, setViewMode] = useState<'SINGLE' | 'GRID' | 'PROXIES' | 'ACCOUNTS' | 'POSTS' | 'STATS'>('SINGLE');
+    const [viewMode, setViewMode] = useState<'SINGLE' | 'GRID' | 'PROXIES' | 'ACCOUNTS' | 'POSTS' | 'STATS' | 'ORCHESTRATION' | 'CAMPAIGNS' | 'SETTINGS'>('SINGLE');
+    const API_BASE = 'http://localhost:4000/api';
+    const [globalSettings, setGlobalSettings] = useState({
+        postsPerDayLimit: 3,
+        commentsPerPostLimit: 10,
+        autoSyncMetadata: true
+    });
     const [platform, setPlatform] = useState<'INSTAGRAM' | 'TWITTER'>(() => {
         // Lazy initialization to avoid hydration mismatch
         if (typeof window !== 'undefined') {
@@ -153,27 +172,36 @@ export default function Dashboard() {
     const [showPostModal, setShowPostModal] = useState(false);
     const [newPost, setNewPost] = useState({ content: '', scheduleDate: '', scheduleTime: '' });
 
-    // Auto Sequence State
     const [autoSequenceStatus, setAutoSequenceStatus] = useState<Record<string, {
         running: boolean;
         currentStep: number;
         totalSteps: number;
         currentAction: string;
     }>>({});
+
+    const [campaigns, setCampaigns] = useState<any[]>([]);
+    const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
+    const [newCampaignName, setNewCampaignName] = useState('');
+    const [newCampaignDesc, setNewCampaignDesc] = useState('');
+    const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
+    const [newGroupName, setNewGroupName] = useState('');
+    const [caption, setCaption] = useState('');
+    const [linkUrl, setLinkUrl] = useState('');
+    const [mediaFiles, setMediaFiles] = useState<FileList | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isMasterAutoOn, setIsMasterAutoOn] = useState(false);
+
     const [isBlocked, setIsBlocked] = useState(false);
     const [blockedMessage, setBlockedMessage] = useState('');
 
-    // New Account Form State
     const [newAcc, setNewAcc] = useState({ 
         username: '', password: '', email: '', 
         proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', 
-        type: 'MAIN', authToken: '', groupId: '' 
+        type: 'MAIN', authToken: '', groupId: ''
     });
     const [twitterCookies, setTwitterCookies] = useState('');
     const [twitterCt0, setTwitterCt0] = useState('');
-    const [availableGroups, setAvailableGroups] = useState<Group[]>([]);
 
-    // New Features State
     const [activeTab, setActiveTab] = useState<'dashboard' | 'groups' | 'templates' | 'activities' | 'comments' | 'notifications'>('dashboard');
     const [groups, setGroups] = useState<Group[]>([]);
     const [templates, setTemplates] = useState<Template[]>([]);
@@ -203,11 +231,95 @@ export default function Dashboard() {
         } else {
             setToken(storedToken);
             setUser(JSON.parse(storedUser));
+            fetchGlobalSettings(storedToken);
+            fetchGroups();
         }
     }, []);
 
+    const fetchGlobalSettings = async (t: string) => {
+        try {
+            const res = await axios.get(`${API_BASE}/settings`, {
+                headers: { 'Authorization': `Bearer ${t}` }
+            });
+            setGlobalSettings(res.data);
+        } catch (err) {
+            console.error('Failed to fetch settings', err);
+        }
+    };
+
+    const fetchGroups = async () => {
+        const storedToken = localStorage.getItem('ghost_token');
+        if (!storedToken) return;
+        try {
+            const res = await axios.get(`${API_BASE}/groups`, {
+                headers: { 'Authorization': `Bearer ${storedToken}` }
+            });
+            setGroups(res.data);
+        } catch (err) {
+            console.error('Failed to fetch groups', err);
+        }
+    };
+
     useEffect(() => {
-        // Save platform preference
+        if (viewMode === 'CAMPAIGNS') fetchCampaigns();
+    }, [viewMode]);
+
+    const fetchCampaigns = async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/campaigns`);
+            setCampaigns(res.data);
+        } catch (err) {
+            console.error('Failed to fetch campaigns', err);
+        }
+    };
+
+    const createCampaign = async () => {
+        if (!newCampaignName) return;
+        try {
+            await axios.post(`${API_BASE}/campaigns`, {
+                name: newCampaignName,
+                description: newCampaignDesc,
+                groupId: newAcc.groupId // Using same state for convenience or adding a specific one
+            });
+            setNewCampaignName('');
+            setNewCampaignDesc('');
+            setIsCreatingCampaign(false);
+            fetchCampaigns();
+        } catch (err) {
+            console.error('Create error', err);
+        }
+    };
+
+    const addContent = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedCampaign) return;
+        
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append('caption', caption);
+        formData.append('linkUrl', linkUrl);
+        if (mediaFiles) {
+            for (let i = 0; i < mediaFiles.length; i++) {
+                formData.append('mediaFiles', mediaFiles[i]);
+            }
+        }
+
+        try {
+            await axios.post(`${API_BASE}/campaigns/${selectedCampaign.id}/content`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setCaption('');
+            setLinkUrl('');
+            setMediaFiles(null);
+            fetchCampaigns();
+        } catch (err) {
+            console.error('Upload error', err);
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    useEffect(() => {
         localStorage.setItem('nexus_platform', platform);
         fetchAccounts(platform);
     }, [platform]);
@@ -231,12 +343,6 @@ export default function Dashboard() {
             ));
         });
 
-        // Load available groups when modal opens
-        if (showAddModal) {
-            fetchGroups();
-        }
-
-        // Intervalle de rafraîchissement des comptes pour plus de robustesse
         const interval = setInterval(() => {
             fetchAccounts(platform);
         }, 5000);
@@ -247,7 +353,6 @@ export default function Dashboard() {
         };
     }, [platform, showAddModal]);
 
-    // Posts & Stats Functions
     const fetchPosts = async (accountId: string) => {
         if (!token) return;
         try {
@@ -261,31 +366,11 @@ export default function Dashboard() {
         }
     };
 
-    const fetchGroups = async () => {
-        if (!token) return;
-        try {
-            const res = await fetch('http://localhost:4000/api/groups', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await res.json();
-            setAvailableGroups(data);
-            
-            // Auto-select first group if available
-            if (data.length > 0 && !newAcc.groupId) {
-                setNewAcc(prev => ({ ...prev, groupId: data[0].id }));
-            }
-        } catch (err) {
-            console.error('Failed to fetch groups:', err);
-        }
-    };
-
     const fetchStats = async (accountId: string, days: number = 30) => {
         if (!token) return;
         try {
-            // accountId might be username, so find the actual account ID
             let actualAccountId = accountId;
             if (!accountId.includes('-')) {
-                // It's a username, find the account
                 const account = accounts.find(a => a.username === accountId);
                 if (account) {
                     actualAccountId = account.id;
@@ -341,36 +426,6 @@ export default function Dashboard() {
         }
     };
 
-    const handleGroupChange = async (accountId: string, groupId: string) => {
-        if (!token) return;
-        try {
-            const res = await fetch(`http://localhost:4000/api/twitter-accounts/${accountId}/group`, {
-                method: 'PATCH',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ groupId })
-            });
-
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || 'Failed to update group');
-            }
-
-            // Refresh accounts list
-            fetchAccounts(platform);
-            
-            // Show success message
-            const account = accounts.find(a => a.id === accountId);
-            const group = availableGroups.find(g => g.id === groupId);
-            alert(`✅ ${account?.username} a été déplacé vers le groupe "${group?.name}"`);
-        } catch (err) {
-            console.error('Failed to update group:', err);
-            alert('Erreur lors du changement de groupe');
-        }
-    };
-
     const fetchAccounts = async (p: string) => {
         const storedToken = localStorage.getItem('ghost_token');
         if (!storedToken) return;
@@ -388,6 +443,9 @@ export default function Dashboard() {
                     setBlockedMessage(data.error);
                     return;
                 }
+                localStorage.removeItem('ghost_token');
+                window.location.href = '/login';
+                return;
             }
 
             if (!res.ok) {
@@ -409,16 +467,8 @@ export default function Dashboard() {
 
     const handleAddAccount = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        // Validate group selection
-        if (!newAcc.groupId) {
-            alert('Erreur: Vous devez sélectionner un groupe pour ce compte');
-            return;
-        }
-        
         const url = platform === 'TWITTER' ? 'http://localhost:4000/api/twitter-accounts' : 'http://localhost:4000/api/accounts';
         try {
-            // For Twitter, build cookies array from simple input values or JSON
             let cookiesArray = undefined;
             if (platform === 'TWITTER') {
                 const cookieInput = twitterCookies.trim();
@@ -427,7 +477,6 @@ export default function Dashboard() {
                     return;
                 }
                 
-                // Try treating it as a raw JSON array first (from EditThisCookie or similar)
                 if (cookieInput.startsWith('[') && cookieInput.endsWith(']')) {
                     try {
                         cookiesArray = JSON.parse(cookieInput);
@@ -436,7 +485,6 @@ export default function Dashboard() {
                         return;
                     }
                 } else {
-                    // Fallback to the old method: treat input as auth_token value
                     cookiesArray = [
                         {
                             name: 'auth_token',
@@ -449,7 +497,6 @@ export default function Dashboard() {
                         }
                     ];
 
-                    // Add ct0 if provided
                     if (twitterCt0.trim()) {
                         cookiesArray.push({
                             name: 'ct0',
@@ -475,10 +522,8 @@ export default function Dashboard() {
                     password: newAcc.password,
                     email: newAcc.email,
                     type: newAcc.type,
-                    groupId: newAcc.groupId, // Required
-                    // Twitter cookie-only authentication
+                    groupId: newAcc.groupId || null,
                     cookies: cookiesArray,
-                    // Legacy support (will be ignored for Twitter)
                     authToken: newAcc.authToken || undefined,
                     proxy: newAcc.proxyHost ? { 
                         host: newAcc.proxyHost, 
@@ -534,7 +579,6 @@ export default function Dashboard() {
             let cookiesArray = undefined;
             if (platform === 'TWITTER' && twitterCookies.trim()) {
                 const cookieInput = twitterCookies.trim();
-                // Try JSON or auth_token
                 if (cookieInput.startsWith('[') && cookieInput.endsWith(']')) {
                     cookiesArray = JSON.parse(cookieInput);
                 } else {
@@ -561,7 +605,7 @@ export default function Dashboard() {
                     password: newAcc.password,
                     email: newAcc.email,
                     type: newAcc.type,
-                    groupId: newAcc.groupId,
+                    groupId: newAcc.groupId || null,
                     sessionCookies: cookiesArray,
                     proxy: newAcc.proxyHost ? { 
                         host: newAcc.proxyHost, 
@@ -599,7 +643,6 @@ export default function Dashboard() {
             return;
         }
 
-        // Refresh posts and stats if Twitter
         if (platform === 'TWITTER') {
             setTimeout(() => {
                 fetchPosts(id);
@@ -607,18 +650,10 @@ export default function Dashboard() {
             }, 2000);
         }
 
-        // Auto-sequence: if warmUp completed, run all other actions automatically
         if (autoSequence && platform === 'TWITTER' && action === 'warmUp') {
             const sequence = ['setupProfile', 'joinCommunity', 'postCommunity', 'spamComments'];
-            const actionLabels = {
-                setupProfile: 'Setup Profile',
-                joinCommunity: 'Join Communities',
-                postCommunity: 'Post Captions',
-                spamComments: 'Spam Comments'
-            };
-            const delays = [60000, 120000, 180000, 240000]; // 1min, 2min, 3min, 4min delays
+            const delays = [60000, 120000, 180000, 240000]; 
             
-            // Set sequence status
             setAutoSequenceStatus(prev => ({
                 ...prev,
                 [id]: {
@@ -632,9 +667,7 @@ export default function Dashboard() {
             for (let i = 0; i < sequence.length; i++) {
                 setTimeout(async () => {
                     const currentAction = sequence[i];
-                    console.log(`Auto-executing: ${currentAction}`);
                     
-                    // Update status
                     setAutoSequenceStatus(prev => ({
                         ...prev,
                         [id]: {
@@ -655,17 +688,12 @@ export default function Dashboard() {
                     });
                     
                     if (seqResponse.ok) {
-                        console.log(`${currentAction} queued successfully`);
-                        // Refresh stats after each action
                         setTimeout(() => {
                             fetchPosts(id);
                             fetchStats(id);
                         }, 2000);
-                    } else {
-                        console.error(`Failed to execute ${currentAction}`);
                     }
                     
-                    // Mark as complete if last action
                     if (i === sequence.length - 1) {
                         setTimeout(() => {
                             setAutoSequenceStatus(prev => ({
@@ -684,6 +712,18 @@ export default function Dashboard() {
         }
     };
 
+    const syncMetadata = async (id: string) => {
+        try {
+            await axios.post(`${API_BASE}/twitter-accounts/${id}/sync`, {}, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            alert("Sync job queued. Profiling and media will be updated shortly.");
+        } catch (err) {
+            console.error('Sync error', err);
+            alert("Failed to queue sync job");
+        }
+    };
+
     const handleDeleteAccount = async (id: string) => {
         if (!confirm("Voulez-vous vraiment détruire ce nœud de la base de données ?")) return;
         const url = platform === 'TWITTER' ? `http://localhost:4000/api/twitter-accounts/${id}` : `http://localhost:4000/api/accounts/${id}`;
@@ -697,10 +737,22 @@ export default function Dashboard() {
             return;
         }
         
-        // Refresh UI
         if (activeAccount && accounts.find(a => a.id === id)?.username === activeAccount) setActiveAccount('');
         fetchAccounts(platform);
     };
+
+    const toggleAutoMode = async (accountId: string, currentStatus: boolean) => {
+        try {
+            const res = await axios.patch(`${API_BASE}/twitter-accounts/${accountId}/auto-mode`, { autoMode: !currentStatus });
+            setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, autoMode: res.data.autoMode } : a));
+        } catch (err) {
+            console.error('Failed to toggle auto-mode', err);
+        }
+    };
+
+    useEffect(() => {
+        (window as any).toggleAutoMode = toggleAutoMode;
+    }, [accounts]);
 
     const handleLogout = () => {
         localStorage.clear();
@@ -709,7 +761,6 @@ export default function Dashboard() {
 
     const activeAccObj = accounts.find(a => a.username === activeAccount);
 
-    // Show new features page
     if (showNewFeatures) {
         return (
             <div className="relative">
@@ -780,11 +831,9 @@ export default function Dashboard() {
 
     return (
         <div className="flex h-screen bg-[#030303] text-white font-sans selection:bg-violet-500/30 overflow-hidden font-light">
-            {/* Ambient Background Glows - suppressed hydration warning */}
             <div className={`absolute top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] pointer-events-none transition-colors duration-1000 ${platform === 'TWITTER' ? 'bg-blue-600/10' : 'bg-fuchsia-600/10'}`} suppressHydrationWarning />
             <div className={`absolute bottom-0 left-0 w-[600px] h-[600px] rounded-full blur-[150px] pointer-events-none transition-colors duration-1000 ${platform === 'TWITTER' ? 'bg-cyan-900/10' : 'bg-indigo-900/10'}`} suppressHydrationWarning />
 
-            {/* Sidebar */}
             <aside className="w-20 lg:w-24 h-screen sticky top-0 border-r border-white/5 flex flex-col items-center py-8 gap-8 bg-black/40 backdrop-blur-xl z-50 overflow-y-auto">
                 <div className="flex flex-col gap-4">
                     <motion.div 
@@ -812,14 +861,17 @@ export default function Dashboard() {
 
                 <nav className="flex flex-col gap-6 items-center w-full relative flex-1 min-h-0">
                     <SidebarIcon icon={<LayoutDashboard size={22} />} active={viewMode === 'SINGLE'} onClick={() => setViewMode('SINGLE')} title="Single Node View" />
+                    <SidebarIcon icon={<Users size={22} />} active={viewMode === 'ORCHESTRATION'} onClick={() => setViewMode('ORCHESTRATION')} title="Social Mastermind" />
+                    <SidebarIcon icon={<Megaphone size={22} />} active={viewMode === 'CAMPAIGNS'} onClick={() => setViewMode('CAMPAIGNS')} title="Campagnes Globales" />
+                    <div className="w-8 h-[1px] bg-white/5 my-2" />
                     <SidebarIcon icon={<Monitor size={22} />} active={viewMode === 'GRID'} onClick={() => setViewMode('GRID')} title="Grid Matrix View" />
                     <SidebarIcon icon={<Server size={22} />} active={viewMode === 'PROXIES'} onClick={() => setViewMode('PROXIES')} title="Proxy Matrix" />
                     <SidebarIcon icon={<Users size={22} />} active={viewMode === 'ACCOUNTS'} onClick={() => setViewMode('ACCOUNTS')} title="Global Accounts" />
+                    <SidebarIcon icon={<FolderTree size={22} />} active={viewMode === 'GROUPS'} onClick={() => setViewMode('GROUPS')} title="Manage Groups" />
                     
                     {platform === 'TWITTER' && (
                         <>
                             <div className="w-8 h-[1px] bg-white/10 my-2" />
-                            <SidebarIcon icon={<Calendar size={22} />} active={viewMode === 'POSTS'} onClick={() => { setViewMode('POSTS'); if (activeAccount) fetchPosts(activeAccount); }} title="Scheduled Posts" />
                             <SidebarIcon icon={<BarChart3 size={22} />} active={viewMode === 'STATS'} onClick={() => { setViewMode('STATS'); if (activeAccount) fetchStats(activeAccount); }} title="Statistics" />
                         </>
                     )}
@@ -840,6 +892,8 @@ export default function Dashboard() {
                         <Plus size={24} className="text-white/50 group-hover:text-white transition-colors" />
                     </motion.button>
 
+                    <SidebarIcon icon={<Settings size={22} />} active={viewMode === 'SETTINGS'} onClick={() => setViewMode('SETTINGS')} title="Global Settings & Quotas" />
+
                     <div className="flex-1" />
 
                     <div className="w-8 h-[1px] bg-white/10 my-2" />
@@ -852,10 +906,8 @@ export default function Dashboard() {
                 </nav>
             </aside>
 
-            {/* Main Content */}
             <main className="flex-1 flex flex-col overflow-hidden relative z-10">
                 
-                {/* Header */}
                 <header className="h-24 border-b border-white/5 flex items-center justify-between px-10 bg-black/20 backdrop-blur-md z-20 transition-all duration-500">
                     <div>
                         <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-3">
@@ -873,6 +925,33 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex items-center gap-4">
+                        {platform === 'TWITTER' && (
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={async () => {
+                                    const newState = !isMasterAutoOn;
+                                    try {
+                                        await axios.post(`${API_BASE}/orchestrator/toggle-all`, 
+                                            { autoMode: newState },
+                                            { headers: { 'Authorization': `Bearer ${token}` }}
+                                        );
+                                        setIsMasterAutoOn(newState);
+                                        fetchAccounts(platform);
+                                    } catch (err) {
+                                        console.error('Master toggle error', err);
+                                    }
+                                }}
+                                className={`px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border ${
+                                    isMasterAutoOn 
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                }`}
+                            >
+                                {isMasterAutoOn ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                                {isMasterAutoOn ? 'STOP ALL BOT' : 'PLAY ALL BOT'}
+                            </motion.button>
+                        )}
                         <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all text-sm font-medium text-white/70 hover:text-white">
                             <RefreshCw size={16} /> Sync
                         </button>
@@ -891,13 +970,10 @@ export default function Dashboard() {
                     </div>
                 </header>
 
-                {/* Dashboard Area */}
                 <div className="flex-1 overflow-y-auto p-8 lg:p-10 relative" style={{ scrollbarWidth: 'none' }}>
                     
                     {viewMode === 'SINGLE' && (
                         <div className="max-w-[1600px] mx-auto space-y-8">
-                            
-                            {/* Stats Overview */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
                                 <StatCard title="Active Instances" value={accounts.filter(a => a.status === 'RUNNING' || a.status === 'CONNECTED').length.toString()} icon={<Server size={18} />} color="text-violet-400" />
                                 <StatCard title="Total Accounts" value={accounts.length.toString()} icon={<Users size={18} />} color="text-fuchsia-400" />
@@ -916,7 +992,6 @@ export default function Dashboard() {
                                 </button>
                             </div>
 
-                            {/* Account Grid List */}
                             <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                                 <AnimatePresence>
                                     {accounts.map((acc, i) => (
@@ -927,7 +1002,6 @@ export default function Dashboard() {
                                             onClick={() => setActiveAccount(acc.username)}
                                             onLaunch={(action, autoSequence) => launchAction(acc.id, action, autoSequence)}
                                             onEditProfile={() => {
-                                                // Open NewFeatures modal to edit profile
                                                 setShowNewFeatures(true);
                                                 setSelectedAccount(acc);
                                                 setProfileForm({
@@ -939,8 +1013,6 @@ export default function Dashboard() {
                                             }}
                                             index={i}
                                             platform={platform}
-                                            groups={availableGroups}
-                                            onGroupChange={handleGroupChange}
                                             autoSequenceStatus={autoSequenceStatus}
                                         />
                                     ))}
@@ -949,10 +1021,7 @@ export default function Dashboard() {
 
                             <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-10" />
 
-                            {/* Dual Pane: Monitor & Console */}
                             <section className="grid grid-cols-1 xl:grid-cols-3 gap-8 pb-10">
-                                
-                                {/* Video Feed */}
                                 <div className="xl:col-span-2 flex flex-col gap-4">
                                     <h3 className="text-sm font-medium text-white/70 flex items-center gap-2 uppercase tracking-widest ml-2">
                                         <Camera size={16} /> Live Screencast
@@ -960,7 +1029,6 @@ export default function Dashboard() {
                                     </h3>
                                     
                                     <div className="bg-[#050505] border border-white/10 rounded-2xl overflow-hidden aspect-video relative group shadow-2xl">
-                                        {/* Status overlay */}
                                         <div className="absolute top-4 left-4 z-10 flex gap-2">
                                             {activeAccObj?.status === 'RUNNING' && (
                                                 <div className="px-3 py-1 bg-emerald-500/20 backdrop-blur-md text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-lg">
@@ -1000,14 +1068,12 @@ export default function Dashboard() {
                                     </div>
                                 </div>
 
-                                {/* Live Terminal Console */}
                                 <div className="flex flex-col gap-4 h-full xl:max-h-[600px]">
                                     <h3 className="text-sm font-medium text-white/70 flex items-center gap-2 uppercase tracking-widest ml-2">
                                         <Terminal size={16} /> Action Logs
                                     </h3>
                                     
                                     <div className="bg-[#0A0A0B] border border-white/10 rounded-2xl overflow-hidden flex flex-col flex-1 shadow-2xl relative">
-                                        {/* Fake macOS style window buttons */}
                                         <div className="px-4 py-3 border-b border-white/5 bg-white/[0.02] flex items-center gap-2">
                                             <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
                                             <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
@@ -1038,7 +1104,6 @@ export default function Dashboard() {
                     )}
                     
                     {viewMode === 'GRID' && (
-                        /* Multi-Spy Grid */
                         <div className="max-w-[1800px] mx-auto space-y-6">
                             <div className="flex items-center gap-3 mb-8">
                                 <LayoutDashboard className="text-violet-400" />
@@ -1088,7 +1153,6 @@ export default function Dashboard() {
                                                     <span className="text-[10px] text-white/25 font-mono">No signal</span>
                                                 </div>
                                             )}
-                                            {/* Hover indicator */}
                                             <div className="absolute inset-0 bg-violet-600/0 group-hover:bg-violet-600/10 transition-colors flex items-center justify-center">
                                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-xs font-medium flex items-center gap-2">
                                                     <Monitor size={14}/> Enter Console
@@ -1196,6 +1260,7 @@ export default function Dashboard() {
                                                                     <div>
                                                                         <div className="font-semibold text-white/90">@{acc.username}</div>
                                                                         {acc.email && <div className="text-[10px] text-white/40">{acc.email}</div>}
+                                                                        {acc.groupId && <div className="text-[10px] bg-white/10 text-white/70 w-max px-2 py-0.5 mt-1 rounded-sm border border-white/5">Group: {acc.groupId}</div>}
                                                                     </div>
                                                                 </div>
                                                             </td>
@@ -1250,82 +1315,331 @@ export default function Dashboard() {
                         </motion.div>
                     )}
 
-                    {/* POSTS SECTION */}
-                    {viewMode === 'POSTS' && (
-                            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1400px] mx-auto space-y-6">
-                            <div className="flex items-center justify-between mb-8">
-                                <div className="flex items-center gap-3">
-                                    <Calendar className="text-violet-400" />
-                                    <h3 className="text-xl font-medium text-white">Scheduled Posts <span className="text-white/30 text-sm ml-2">({posts.length} Total)</span></h3>
+                    {viewMode === 'GROUPS' && (
+                        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-6xl mx-auto space-y-8">
+                            <div className="flex justify-between items-center mb-8">
+                                <div>
+                                    <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent flex items-center gap-3">
+                                        <FolderTree className="text-blue-500" /> Group Management
+                                    </h1>
+                                    <p className="text-white/40 mt-1">Organize MAIN and SUPPORT accounts into dedicated groups or niches.</p>
                                 </div>
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => setShowPostModal(true)}
-                                    className="px-4 py-2 bg-violet-500 hover:bg-violet-600 rounded-xl text-white font-medium flex items-center gap-2 transition-colors"
-                                >
-                                    <Plus size={18} />
-                                    New Post
-                                </motion.button>
                             </div>
 
-                            {!activeAccount ? (
-                                <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl p-12 text-center">
-                                    <p className="text-white/40">Select an account to view posts</p>
+                            <div className="bg-[#0f0f11] border border-white/10 rounded-3xl p-8 mb-8 relative overflow-hidden shadow-lg shadow-black/50">
+                                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 pointer-events-none" />
+                                <h2 className="text-lg font-semibold text-white mb-6">Create New Group</h2>
+                                <div className="flex gap-4">
+                                    <input 
+                                        type="text"
+                                        placeholder="Enter group name (e.g., Fitness Niche)"
+                                        value={newGroupName}
+                                        onChange={e => setNewGroupName(e.target.value)}
+                                        className="flex-1 bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-sm transition-all text-white/90"
+                                    />
+                                    <button 
+                                        onClick={async () => {
+                                            if (!newGroupName) return;
+                                            try {
+                                                await fetch('http://localhost:4000/api/groups', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('ghost_token')}` },
+                                                    body: JSON.stringify({ name: newGroupName })
+                                                });
+                                                setNewGroupName('');
+                                                fetchGroups();
+                                            } catch (err) {}
+                                        }}
+                                        className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-blue-500/20 shadow-lg"
+                                    >
+                                        <Plus size={18} /> Create Group
+                                    </button>
                                 </div>
-                            ) : posts.length === 0 ? (
-                                <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl p-12 text-center">
-                                    <Calendar size={48} className="mx-auto text-white/20 mb-4" />
-                                    <p className="text-white/40">No posts yet. Create your first scheduled post!</p>
-                                </div>
-                            ) : (
-                                <div className="grid gap-4">
-                                    {posts.map((post) => {
-                                        const statusColors = {
-                                            PENDING: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-                                            PUBLISHED: 'bg-green-500/20 text-green-400 border-green-500/30',
-                                            FAILED: 'bg-red-500/20 text-red-400 border-red-500/30'
-                                        };
-                                        return (
-                                            <div key={post.id} className="bg-[#0A0A0B] border border-white/5 rounded-xl p-6 hover:border-white/10 transition-colors">
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="flex-1">
-                                                        <p className="text-white/90 mb-3">{post.content}</p>
-                                                        <div className="flex items-center gap-4 text-xs text-white/40">
-                                                            <span className="flex items-center gap-1">
-                                                                <Clock size={12} />
-                                                                {new Date(post.scheduleDate).toLocaleString()}
-                                                            </span>
-                                                            {post.publishedAt && (
-                                                                <span className="flex items-center gap-1">
-                                                                    <Send size={12} />
-                                                                    Published: {new Date(post.publishedAt).toLocaleString()}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex flex-col items-end gap-2">
-                                                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${statusColors[post.status as keyof typeof statusColors]}`}>
-                                                            {post.status}
-                                                        </span>
-                                                        {(post.likes > 0 || post.retweets > 0 || post.replies > 0) && (
-                                                            <div className="flex items-center gap-3 text-xs text-white/50">
-                                                                {post.likes > 0 && <span className="flex items-center gap-1"><Heart size={12} className="text-pink-400" /> {post.likes}</span>}
-                                                                {post.retweets > 0 && <span className="flex items-center gap-1"><Repeat size={12} className="text-green-400" /> {post.retweets}</span>}
-                                                                {post.replies > 0 && <span className="flex items-center gap-1"><MessageCircle size={12} className="text-blue-400" /> {post.replies}</span>}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {groups.map(g => (
+                                    <div key={g.id} className="bg-[#0f0f11] border border-white/5 rounded-3xl p-6 relative group hover:border-white/20 transition-all hover:bg-white/[0.02]">
+                                        <div className="absolute top-6 right-6">
+                                            <button 
+                                                onClick={async () => {
+                                                    if(confirm('Delete group ?')) {
+                                                        await fetch(`http://localhost:4000/api/groups/${g.id}`, {
+                                                            method: 'DELETE',
+                                                            headers: { 'Authorization': `Bearer ${localStorage.getItem('ghost_token')}` }
+                                                        });
+                                                        fetchGroups();
+                                                    }
+                                                }}
+                                                className="p-2 bg-rose-500/10 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-colors"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-4 mb-4">
+                                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20">
+                                                <FolderTree size={20} />
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                                            <div>
+                                                <h3 className="font-bold text-lg text-white">{g.name}</h3>
+                                                <p className="text-xs text-white/40 font-mono">ID: {g.id}</p>
+                                            </div>
+                                        </div>
+                                        <div className="pt-4 border-t border-white/5 flex justify-between items-center text-sm">
+                                            <span className="text-white/40">Status</span>
+                                            <span className="font-mono text-[10px] bg-green-500/10 text-green-400 px-2.5 py-1 rounded-md border border-green-500/20 font-bold tracking-wider">
+                                                ACTIVE
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {groups.length === 0 && (
+                                    <div className="col-span-full py-12 text-center border overflow-hidden rounded-3xl border-dashed border-white/10 bg-white/[0.01]">
+                                        <FolderTree size={48} className="mx-auto text-white/10 mb-4" />
+                                        <p className="text-white/40">No groups configured yet. Create one to organize your accounts.</p>
+                                    </div>
+                                )}
+                            </div>
                         </motion.div>
                     )}
 
-                    {/* STATS SECTION */}
+                    {viewMode === 'CAMPAIGNS' && (
+                        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1400px] mx-auto space-y-8">
+                            <div className="flex justify-between items-center mb-12">
+                                <div>
+                                    <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent flex items-center gap-3">
+                                        <Megaphone className="text-blue-500" /> Ghost Campaigns
+                                    </h1>
+                                    <p className="text-gray-400 mt-2">Manage your global content pool for the Mastermind Loop.</p>
+                                </div>
+                                <button 
+                                    onClick={() => setIsCreatingCampaign(true)}
+                                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-blue-500/20 active:scale-95 text-white"
+                                >
+                                    <Plus size={20} /> Nouvelle Campagne
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                                <div className="lg:col-span-4 space-y-4">
+                                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-6 text-white/70">
+                                        <Layers className="text-gray-500" /> Vos Campagnes
+                                    </h2>
+                                    {campaigns.map(c => (
+                                        <div 
+                                            key={c.id}
+                                            onClick={() => setSelectedCampaign(c)}
+                                            className={`p-6 rounded-2xl border cursor-pointer transition-all ${
+                                                selectedCampaign?.id === c.id 
+                                                ? 'bg-blue-600/10 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.15)] text-white' 
+                                                : 'bg-white/5 border-white/10 hover:border-white/20 text-white/60'
+                                            }`}
+                                        >
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <h3 className="font-bold text-lg">{c.name}</h3>
+                                                    <p className="text-sm text-gray-500 mt-1">{c.contents?.length || 0} items de contenu</p>
+                                                    {c.groupId && <p className="text-[10px] text-blue-400 mt-1 uppercase font-semibold">Group: {c.groupId}</p>}
+                                                </div>
+                                                {c.isActive && <span className="px-2 py-1 bg-green-500/10 text-green-500 text-[10px] rounded-full border border-green-500/20">ACTIVE</span>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="lg:col-span-8">
+                                    {selectedCampaign ? (
+                                        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl">
+                                            <div className="flex justify-between items-center mb-8">
+                                                <h2 className="text-2xl font-bold flex items-center gap-3 text-white">
+                                                    <Sparkles className="text-yellow-400" /> Ajouter du Contenu à {selectedCampaign.name}
+                                                </h2>
+                                            </div>
+
+                                            <form onSubmit={addContent} className="space-y-6">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
+                                                        <Type size={16} /> Caption
+                                                    </label>
+                                                    <textarea 
+                                                        value={caption}
+                                                        onChange={(e) => setCaption(e.target.value)}
+                                                        className="w-full bg-[#121217] border border-white/10 rounded-2xl p-4 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-600 mini-scrollbar h-32 text-white"
+                                                        placeholder="Qu'est-ce que le bot doit dire ?"
+                                                        required
+                                                    />
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
+                                                            <LinkIcon size={16} /> Lien (Optionnel)
+                                                        </label>
+                                                        <input 
+                                                            type="url"
+                                                            value={linkUrl}
+                                                            onChange={(e) => setLinkUrl(e.target.value)}
+                                                            className="w-full bg-[#121217] border border-white/10 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-white"
+                                                            placeholder="https://..."
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
+                                                            <ImageIcon size={16} /> Médias (Images/Videos)
+                                                        </label>
+                                                        <input 
+                                                            type="file"
+                                                            multiple
+                                                            onChange={(e) => setMediaFiles(e.target.files)}
+                                                            className="w-full text-sm text-gray-400 file:mr-4 file:py-3 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 transition-all cursor-pointer"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <button 
+                                                    disabled={isUploading}
+                                                    className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-2xl font-bold flex items-center justify-center gap-3 shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed group text-white"
+                                                >
+                                                    {isUploading ? (
+                                                        <Loader2 className="animate-spin" />
+                                                    ) : (
+                                                        <>
+                                                            <Send size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" /> 
+                                                            Ajouter au Pool
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </form>
+
+                                            <div className="mt-12">
+                                                <h3 className="text-lg font-semibold mb-6 text-white">Contenu de la Campagne</h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {selectedCampaign.contents?.map((item: any) => (
+                                                        <div key={item.id} className="bg-[#121217] p-5 rounded-2xl border border-white/5 group relative">
+                                                            <p className="text-sm text-gray-300 line-clamp-3">{item.caption}</p>
+                                                            {item.linkUrl && <p className="text-xs text-blue-400 mt-2 truncate">{item.linkUrl}</p>}
+                                                            {item.mediaUrls?.length > 0 && (
+                                                                <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+                                                                    {item.mediaUrls.map((m: string, idx: number) => (
+                                                                        <img key={idx} src={m} className="w-16 h-16 rounded-lg object-cover border border-white/10" />
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            <div className="mt-4 flex justify-between items-center">
+                                                                <span className="text-[10px] text-gray-600 uppercase tracking-widest font-bold">Utilisé {item.usedCount} fois</span>
+                                                                <button className="text-red-500/50 hover:text-red-500 p-2 rounded-lg hover:bg-red-500/10 transition-all">
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="h-[600px] flex flex-col items-center justify-center bg-white/5 border border-dashed border-white/10 rounded-3xl text-gray-500">
+                                            <Megaphone size={64} className="mb-6 opacity-20" />
+                                            <p className="text-xl font-medium">Sélectionnez une campagne pour voir son contenu</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {viewMode === 'SETTINGS' && (
+                        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+                            <div className="flex items-center justify-between mb-2">
+                                <div>
+                                    <h2 className="text-3xl font-bold text-white tracking-tight">Global Settings</h2>
+                                    <p className="text-white/40 mt-1">Configure quotas and automation behavior for all accounts.</p>
+                                </div>
+                                <button 
+                                    onClick={async () => {
+                                        try {
+                                            await axios.post(`${API_BASE}/settings`, globalSettings, {
+                                                headers: { 'Authorization': `Bearer ${token}` }
+                                            });
+                                            alert("Settings saved successfully!");
+                                        } catch (err) {
+                                            alert("Failed to save settings");
+                                        }
+                                    }}
+                                    className="px-6 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20 flex items-center gap-2"
+                                >
+                                    <Save size={18} /> Save All Changes
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <section className="p-8 bg-[#0A0A0B] border border-white/5 rounded-3xl space-y-6">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
+                                            <Megaphone size={20} />
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-white">Posting Limits (MAIN)</h3>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2 block">Max Posts Per Day / Acc</label>
+                                            <input 
+                                                type="number"
+                                                value={globalSettings.postsPerDayLimit}
+                                                onChange={(e) => setGlobalSettings({...globalSettings, postsPerDayLimit: parseInt(e.target.value)})}
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-violet-500/50 outline-none transition-all"
+                                            />
+                                            <p className="text-[10px] text-white/20 mt-2 italic">Limits activity to stay under X's detection threshold (Recommended: 3-5).</p>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section className="p-8 bg-[#0A0A0B] border border-white/5 rounded-3xl space-y-6">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="p-2 bg-pink-500/10 rounded-lg text-pink-400">
+                                            <MessageSquare size={20} />
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-white">Comment Swarm Quotas</h3>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-xs uppercase tracking-widest text-white/40 font-bold mb-2 block">Max Comments Per Main Post</label>
+                                            <input 
+                                                type="number"
+                                                value={globalSettings.commentsPerPostLimit}
+                                                onChange={(e) => setGlobalSettings({...globalSettings, commentsPerPostLimit: parseInt(e.target.value)})}
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-violet-500/50 outline-none transition-all"
+                                            />
+                                            <p className="text-[10px] text-white/20 mt-2 italic">Defines how many support accounts will reply to a new main post.</p>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section className="p-8 bg-[#0A0A0B] border border-white/5 rounded-3xl space-y-6">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+                                            <Shield size={20} />
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-white">Account Safety</h3>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between p-4 bg-white/[0.02] rounded-2xl border border-white/5">
+                                            <div>
+                                                <div className="text-sm font-semibold text-white">Auto Sync Metadata</div>
+                                                <div className="text-[10px] text-white/40">Automatically update bio/photo from X periodically.</div>
+                                            </div>
+                                            <button 
+                                                onClick={() => setGlobalSettings({...globalSettings, autoSyncMetadata: !globalSettings.autoSyncMetadata})}
+                                                className={`w-12 h-6 rounded-full relative transition-all ${globalSettings.autoSyncMetadata ? 'bg-emerald-500' : 'bg-white/10'}`}
+                                            >
+                                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${globalSettings.autoSyncMetadata ? 'right-1' : 'left-1'}`} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                    )}
+
                     {viewMode === 'STATS' && (
                         <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1400px] mx-auto space-y-6">
                             <div className="flex items-center gap-3 mb-8">
@@ -1344,7 +1658,6 @@ export default function Dashboard() {
                                 </div>
                             ) : (
                                 <>
-                                    {/* Totals Cards */}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         <StatCard icon={<Send size={20} />} title="Tweets Posted" value={stats.totals.tweetsPosted.toString()} color="text-violet-400" />
                                         <StatCard icon={<Heart size={20} />} title="Likes Received" value={stats.totals.likesReceived.toString()} color="text-pink-400" />
@@ -1359,7 +1672,6 @@ export default function Dashboard() {
                                         <StatCard icon={<Activity size={20} />} title="Engagement Rate" value={stats.totals.likesReceived > 0 ? ((stats.totals.likesReceived + stats.totals.retweetsReceived + stats.totals.repliesReceived) / (stats.totals.tweetsPosted || 1) * 100).toFixed(1) + '%' : '0%'} color="text-emerald-400" />
                                     </div>
 
-                                    {/* Daily Stats Table */}
                                     <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl overflow-hidden">
                                         <div className="px-6 py-4 border-b border-white/5">
                                             <h4 className="text-sm font-medium text-white/70">Daily Breakdown (Last {stats.stats.length} days)</h4>
@@ -1400,7 +1712,6 @@ export default function Dashboard() {
                 </div>
             </main>
 
-            {/* Add Account Modal */}
             <AnimatePresence>
                 {showAddModal && (
                     <motion.div 
@@ -1460,30 +1771,6 @@ export default function Dashboard() {
                                             </div>
                                         </div>
 
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Groupe <span className="text-red-400">*</span></label>
-                                            <div className="relative">
-                                                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><FolderTree size={16} /></div>
-                                                <select 
-                                                    value={newAcc.groupId} 
-                                                    onChange={(e) => setNewAcc({...newAcc, groupId: e.target.value})}
-                                                    className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
-                                                    required
-                                                >
-                                                    <option value="">Sélectionner un groupe...</option>
-                                                    {availableGroups.map(group => (
-                                                        <option key={group.id} value={group.id}>
-                                                            {group.name} ({group.taskType})
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                {availableGroups.length === 0 && (
-                                                    <p className="text-[10px] text-orange-400 mt-1">
-                                                        ⚠️ Vous devez d'abord créer un groupe
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
 
                                         <div className="p-4 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-2xl space-y-4">
                                             <div className="flex items-start justify-between mb-2">
@@ -1555,7 +1842,6 @@ export default function Dashboard() {
                 )}
             </AnimatePresence>
 
-            {/* Edit Account Modal */}
             <AnimatePresence>
                 {showEditModal && editingAccount && (
                     <motion.div 
@@ -1598,39 +1884,40 @@ export default function Dashboard() {
 
                                 {platform === 'TWITTER' && (
                                     <>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Account Role</label>
-                                            <div className="relative">
-                                                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><Briefcase size={16} /></div>
-                                                <select 
-                                                    value={newAcc.type} 
-                                                    onChange={(e) => setNewAcc({...newAcc, type: e.target.value})}
-                                                    className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
-                                                >
-                                                    <option value="MAIN">MAIN (Model)</option>
-                                                    <option value="SUPPORT">SUPPORT (Spammer)</option>
-                                                </select>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Account Role</label>
+                                                <div className="relative">
+                                                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><Briefcase size={16} /></div>
+                                                    <select 
+                                                        value={newAcc.type} 
+                                                        onChange={(e) => setNewAcc({...newAcc, type: e.target.value})}
+                                                        className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
+                                                    >
+                                                        <option value="MAIN">MAIN (Model)</option>
+                                                        <option value="SUPPORT">SUPPORT (Spammer)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Assign to Group</label>
+                                                <div className="relative">
+                                                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><FolderTree size={16} /></div>
+                                                    <select 
+                                                        value={newAcc.groupId || ''} 
+                                                        onChange={(e) => setNewAcc({...newAcc, groupId: e.target.value})}
+                                                        className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
+                                                    >
+                                                        <option value="">No Group (Global)</option>
+                                                        {groups.map(g => (
+                                                            <option key={g.id} value={g.id}>{g.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Groupe</label>
-                                            <div className="relative">
-                                                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><FolderTree size={16} /></div>
-                                                <select 
-                                                    value={newAcc.groupId} 
-                                                    onChange={(e) => setNewAcc({...newAcc, groupId: e.target.value})}
-                                                    className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
-                                                >
-                                                    <option value="">Sélectionner un groupe...</option>
-                                                    {availableGroups.map(group => (
-                                                        <option key={group.id} value={group.id}>
-                                                            {group.name} ({group.taskType})
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
 
                                         <div className="p-4 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 rounded-2xl space-y-4">
                                             <div className="flex items-start justify-between mb-2">
@@ -1685,7 +1972,73 @@ export default function Dashboard() {
                 )}
             </AnimatePresence>
 
-            {/* Create Post Modal */}
+            <AnimatePresence>
+                {isCreatingCampaign && (
+                    <motion.div 
+                        key="campaign-modal-wrapper"
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0"
+                            onClick={() => setIsCreatingCampaign(false)}
+                        />
+                        <motion.form
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            onSubmit={(e) => { e.preventDefault(); createCampaign(); }}
+                            className="w-full max-w-xl bg-[#0f0f11] border border-white/20 rounded-[40px] p-10 relative shadow-[0_0_80px_rgba(0,0,0,0.8)] z-10"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-3xl pointer-events-none" />
+                            
+                            <button type="button" onClick={() => setIsCreatingCampaign(false)} className="absolute top-6 right-6 p-2 bg-white/5 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors">
+                                <X size={16} />
+                            </button>
+                            
+                            <h3 className="text-2xl font-semibold mb-2">
+                                Nouvelle Campagne
+                            </h3>
+                            <p className="text-sm text-white/40 mb-8">
+                                Créer une nouvelle campagne et lui assigner un groupe.
+                            </p>
+                            
+                            <div className="space-y-5">
+                                <Input label="Nom de la campagne" icon={<Megaphone size={16}/>} value={newCampaignName} onChange={setNewCampaignName} />
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Assign to Group</label>
+                                    <div className="relative">
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30"><FolderTree size={16} /></div>
+                                        <select 
+                                            value={newAcc.groupId || ''} 
+                                            onChange={(e) => setNewAcc({...newAcc, groupId: e.target.value})}
+                                            className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none pl-10 pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] appearance-none"
+                                        >
+                                            <option value="">No Group (Global)</option>
+                                            {groups.map(g => (
+                                                <option key={g.id} value={g.id}>{g.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <motion.button 
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    type="submit" 
+                                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold mt-4 hover:bg-blue-500 transition-colors shadow-lg flex items-center justify-center gap-2"
+                                >
+                                    <Plus size={18} /> Créer la campagne
+                                </motion.button>
+                            </div>
+                        </motion.form>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <AnimatePresence>
                 {showPostModal && (
                     <motion.div 
@@ -1775,7 +2128,6 @@ export default function Dashboard() {
                 )}
             </AnimatePresence>
 
-            {/* Auth Token Guide Modal */}
             <AnimatePresence>
                 {showTokenGuide && (
                     <motion.div 
@@ -1810,7 +2162,6 @@ export default function Dashboard() {
                             </div>
 
                             <div className="p-6 space-y-6">
-                                {/* Step 1 */}
                                 <div className="p-5 bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-2xl">
                                     <div className="flex items-start gap-4">
                                         <div className="shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">1</div>
@@ -1841,7 +2192,6 @@ export default function Dashboard() {
                                     </div>
                                 </div>
 
-                                {/* Step 2 */}
                                 <div className="p-5 bg-gradient-to-br from-violet-500/10 to-violet-600/5 border border-violet-500/20 rounded-2xl">
                                     <div className="flex items-start gap-4">
                                         <div className="shrink-0 w-8 h-8 bg-violet-500 rounded-full flex items-center justify-center text-white font-bold">2</div>
@@ -1861,7 +2211,6 @@ export default function Dashboard() {
                                     </div>
                                 </div>
 
-                                {/* Step 3 */}
                                 <div className="p-5 bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-2xl">
                                     <div className="flex items-start gap-4">
                                         <div className="shrink-0 w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">3</div>
@@ -1921,7 +2270,6 @@ console.log("✅ AUTH TOKEN:", token);`}
                                     </div>
                                 </div>
 
-                                {/* Step 4 - Alternative */}
                                 <div className="p-5 bg-gradient-to-br from-pink-500/10 to-pink-600/5 border border-pink-500/20 rounded-2xl">
                                     <div className="flex items-start gap-4">
                                         <div className="shrink-0 w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center text-white font-bold">4</div>
@@ -1953,7 +2301,6 @@ console.log("✅ AUTH TOKEN:", token);`}
                                     </div>
                                 </div>
 
-                                {/* Step 5 */}
                                 <div className="p-5 bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20 rounded-2xl">
                                     <div className="flex items-start gap-4">
                                         <div className="shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">5</div>
@@ -1982,7 +2329,6 @@ console.log("✅ AUTH TOKEN:", token);`}
                                     </div>
                                 </div>
 
-                                {/* Warning */}
                                 <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                                     <p className="text-xs text-amber-300 mb-2">
                                         ⚠️ <strong>Important:</strong>
@@ -2004,9 +2350,6 @@ console.log("✅ AUTH TOKEN:", token);`}
     );
 }
 
-// --- Helper Components & Functions ---
-
-// Parses message for colorizing logs
 function getMessageColor(msg: string) {
     const lower = msg.toLowerCase();
     if (lower.includes('error') || lower.includes('fail')) return 'text-rose-400';
@@ -2020,7 +2363,7 @@ function getStatusColor(status: string) {
     if (['running', 'online', 'active', 'connected', 'success'].includes(lower)) return { border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', dot: 'bg-emerald-400' };
     if (['error', 'banned', 'offline', 'failed'].includes(lower)) return { border: 'border-rose-500/30', bg: 'bg-rose-500/10', dot: 'bg-rose-400' };
     if (['warming', 'warm up', 'pending', 'starting'].includes(lower)) return { border: 'border-amber-500/30', bg: 'bg-amber-500/10', dot: 'bg-amber-400' };
-    return { border: 'border-white/10', bg: 'bg-white/5', dot: 'bg-white/30' }; // default
+    return { border: 'border-white/10', bg: 'bg-white/5', dot: 'bg-white/30' };
 }
 
 function StatCard({ title, value, icon, color }: { title: string, value: string, icon: any, color: string }) {
@@ -2054,39 +2397,28 @@ function SidebarIcon({ icon, active, onClick, title }: { icon: any, active?: boo
     );
 }
 
-function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index, platform, groups, onGroupChange, autoSequenceStatus }: { 
+function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index, platform, autoSequenceStatus }: { 
     account: Account, 
     active: boolean, 
     onClick: () => void, 
-    onLaunch: (action: string, autoSequence?: boolean) => void, 
-    onEditProfile: () => void, 
-    index: number, 
-    platform: string,
-    groups?: Group[],
-    onGroupChange?: (accountId: string, groupId: string) => void,
-    autoSequenceStatus?: Record<string, {
-        running: boolean;
-        currentStep: number;
-        totalSteps: number;
-        currentAction: string;
-    }>
+    onLaunch: (action: string, autoSequence?: boolean) => void,
+    onEditProfile: () => void,
+    index: number,
+    platform: 'TWITTER' | 'INSTAGRAM',
+    autoSequenceStatus: {[key: string]: any}
 }) {
-    const statusTheme = getStatusColor(account.status);
-    
-    // Action labels mapping
+    const statusTheme = getStatusColor(account.status || 'IDLE');
     const actionLabels: Record<string, string> = {
         warmUp: 'Warm Up',
-        setupProfile: 'Setup Profile',
-        joinCommunity: 'Join Communities',
+        follow: 'Follow Target',
         postCommunity: 'Post Captions',
         spamComments: 'Spam Comments',
-        Complete: 'Complete'
+        updateProfile: 'Update Profile'
     };
-    
-    // Actions mapping depending on platform
+
     const platformActions = platform === 'TWITTER' ? [
-        { id: 'warmUp', label: 'Day 1: Warm Up'},
-        { id: 'joinCommunity', label: 'Day 2: Join Communities'},
+        { id: 'warmUp', label: 'Day 1: Warm-up & Interaction'},
+        { id: 'follow', label: 'Day 2: Follow Targets'},
         { id: 'postCommunity', label: 'Day 3: Post Captions'},
         { id: 'spamComments', label: 'Day 4: Spam Comments (Support)'},
         { id: 'updateProfile', label: '🪪 Mettre à jour le Profil'}
@@ -2096,8 +2428,6 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
     ];
 
     const [showActions, setShowActions] = useState(false);
-    const [showGroupDropdown, setShowGroupDropdown] = useState(false);
-    const currentGroup = groups?.find(g => g.id === (account as any).groupId);
 
     return (
         <motion.div 
@@ -2108,12 +2438,16 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
             className={`p-5 rounded-2xl border transition-all duration-300 cursor-pointer relative overflow-visible group flex flex-col justify-between
             ${active ? 'bg-white/[0.04] border-violet-500/50 shadow-[0_4px_30px_rgba(139,92,246,0.1)]' : 'bg-[#0A0A0B] hover:bg-white/[0.02] border-white/5'}`}
         >
-            {/* Active glow inside card */}
             {active && <div className="absolute -top-10 -right-10 w-32 h-32 bg-violet-500/20 rounded-full blur-[40px] pointer-events-none overflow-hidden" />}
 
             <div className="flex items-center justify-between gap-4 mb-5 relative z-10">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${platform === 'TWITTER' ? 'from-blue-600/20 to-cyan-600/20' : 'from-violet-600/20 to-fuchsia-600/20'} flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform shrink-0`}>
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${platform === 'TWITTER' ? 'from-blue-600/20 to-cyan-600/20' : 'from-violet-600/20 to-fuchsia-600/20'} flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform shrink-0 relative`}>
                     {platform === 'TWITTER' ? <Twitter size={20} className="text-blue-400" /> : <Instagram size={20} className="text-violet-300" />}
+                    {account.autoMode && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center shadow-lg border-2 border-[#0A0A0B]">
+                            <Zap size={8} className="text-white fill-white" />
+                        </div>
+                    )}
                 </div>
                 <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-white/90 text-[15px] truncate max-w-full">@{account.username}</h4>
@@ -2121,68 +2455,28 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
                         <div className={`w-1.5 h-1.5 rounded-full ${statusTheme.dot}`} />
                         <span className={`text-[10px] uppercase font-mono tracking-wider ${statusTheme.dot.replace('bg-', 'text-')}`}>{account.status || 'IDLE'}</span>
                     </div>
-                    {/* Group Badge */}
-                    {groups && currentGroup && (
-                        <div className="mt-1">
-                            <span className="text-[9px] uppercase tracking-wider text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                                📁 {currentGroup.name}
-                            </span>
-                        </div>
-                    )}
+                    <div className="flex flex-wrap gap-1 mt-1">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); (window as any).toggleAutoMode(account.id, !!account.autoMode); }}
+                            className={`text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border transition-all ${
+                                account.autoMode 
+                                ? 'bg-blue-600 text-white border-blue-400' 
+                                : 'bg-white/5 text-gray-500 border-white/10 hover:border-white/20'
+                            }`}
+                        >
+                            {account.autoMode ? 'Auto ON' : 'Auto OFF'}
+                        </button>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); (window as any).syncMetadata(account.id); }}
+                            className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border bg-white/5 text-white/40 border-white/10 hover:bg-violet-500/20 hover:text-violet-300 hover:border-violet-500/30 transition-all flex items-center gap-1"
+                            title="Synchronize Metadata"
+                        >
+                            <RefreshCw size={8} /> Sync
+                        </button>
+                    </div>
                 </div>
                 
                 <div className="flex gap-2">
-                    {/* Change Group Button */}
-                    {groups && groups.length > 1 && (
-                        <div className="relative">
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); setShowGroupDropdown(!showGroupDropdown); }} 
-                                className="p-2.5 bg-white/5 text-white/60 rounded-xl hover:bg-purple-500/20 hover:text-purple-400 transition-all shadow-sm shrink-0"
-                                title="Change Group"
-                            >
-                                <FolderTree size={16} />
-                            </button>
-                            
-                            <AnimatePresence mode="wait">
-                                {showGroupDropdown && (
-                                    <motion.div 
-                                        key={`group-dropdown-${account.id}`}
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute right-0 top-full mt-2 w-56 bg-[#121215] border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-50 overflow-hidden"
-                                    >
-                                        <div className="p-2 flex flex-col gap-1">
-                                            <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/40 font-semibold">Move to Group</div>
-                                            {groups.map(group => (
-                                                <button 
-                                                    key={group.id}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (onGroupChange && group.id !== (account as any).groupId) {
-                                                            onGroupChange(account.id, group.id);
-                                                            setShowGroupDropdown(false);
-                                                        }
-                                                    }}
-                                                    disabled={group.id === (account as any).groupId}
-                                                    className={`px-3 py-2 rounded-lg text-left text-xs transition-all ${
-                                                        group.id === (account as any).groupId
-                                                            ? 'bg-blue-500/20 text-blue-400 cursor-not-allowed'
-                                                            : 'hover:bg-white/5 text-white/80'
-                                                    }`}
-                                                >
-                                                    <div className="font-medium">{group.name}</div>
-                                                    <div className="text-[10px] text-white/40 mt-0.5">{group.taskType}</div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    )}
-                    
-                    {/* Edit Profile Button */}
                     <button 
                         onClick={(e) => { e.stopPropagation(); onEditProfile(); }} 
                         className="p-2.5 bg-white/5 text-white/60 rounded-xl hover:bg-blue-500/20 hover:text-blue-400 transition-all shadow-sm shrink-0 flex items-center gap-1"
@@ -2199,59 +2493,57 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
                         >
                             <Play size={16} fill="currentColor" />
                         </button>
-                    <AnimatePresence mode="wait">
-                        {showActions && (
-                            <motion.div 
-                                key={`actions-dropdown-${account.id}`}
-                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                className="absolute right-0 top-full mt-2 w-64 bg-[#121215] border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-50 overflow-hidden"
-                            >
-                                <div className="p-2 flex flex-col gap-1">
-                                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/40 font-semibold">Select Action</div>
-                                                                
-                                    {/* Auto Sequence Button - Only for Twitter */}
-                                    {platform === 'TWITTER' && (
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onLaunch('warmUp', true); // true = auto sequence
-                                                setShowActions(false);
-                                            }}
-                                            className="px-3 py-2.5 text-left text-sm font-semibold bg-gradient-to-r from-violet-600/20 to-purple-600/20 hover:from-violet-600/30 hover:to-purple-600/30 text-violet-300 border border-violet-500/30 rounded-lg transition-all flex items-center gap-2"
-                                        >
-                                            <span className="text-base">⚡</span>
-                                            <div>
-                                                <div>Run Full Sequence</div>
-                                                <div className="text-[10px] text-violet-400/70 font-normal">All steps automatically</div>
-                                            </div>
-                                        </button>
-                                    )}
-                                                                
-                                    {/* Divider */}
-                                    {platform === 'TWITTER' && (
-                                        <div className="border-t border-white/5 my-1"></div>
-                                    )}
-                                                                
-                                    {/* Individual Actions */}
-                                    {platformActions.map(action => (
-                                        <button 
-                                            key={action.id}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onLaunch(action.id, false); // false = single action
-                                                setShowActions(false);
-                                            }}
-                                            className="px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white rounded-lg transition-colors truncate"
-                                        >
-                                            {action.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                        
+                        <AnimatePresence mode="wait">
+                            {showActions && (
+                                <motion.div 
+                                    key={`actions-dropdown-${account.id}`}
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    className="absolute right-0 top-full mt-2 w-64 bg-[#121215] border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-50 overflow-hidden"
+                                >
+                                    <div className="p-2 flex flex-col gap-1">
+                                        <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/40 font-semibold">Select Action</div>
+                                                                    
+                                        {platform === 'TWITTER' && (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onLaunch('warmUp', true);
+                                                    setShowActions(false);
+                                                }}
+                                                className="px-3 py-2.5 text-left text-sm font-semibold bg-gradient-to-r from-violet-600/20 to-purple-600/20 hover:from-violet-600/30 hover:to-purple-600/30 text-violet-300 border border-violet-500/30 rounded-lg transition-all flex items-center gap-2"
+                                            >
+                                                <span className="text-base">⚡</span>
+                                                <div>
+                                                    <div>Run Full Sequence</div>
+                                                    <div className="text-[10px] text-violet-400/70 font-normal">All steps automatically</div>
+                                                </div>
+                                            </button>
+                                        )}
+                                                                    
+                                        {platform === 'TWITTER' && (
+                                            <div className="border-t border-white/5 my-1"></div>
+                                        )}
+                                                                    
+                                        {platformActions.map(action => (
+                                            <button 
+                                                key={action.id}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onLaunch(action.id, false);
+                                                    setShowActions(false);
+                                                }}
+                                                className="px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white rounded-lg transition-colors truncate"
+                                            >
+                                                {action.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </div>
             </div>
@@ -2270,7 +2562,6 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
                     />
                 </div>
                 
-                {/* Auto Sequence Progress Indicator */}
                 {autoSequenceStatus[account.id]?.running && (
                     <div className="mt-3 p-2 bg-gradient-to-r from-violet-600/10 to-purple-600/10 border border-violet-500/30 rounded-lg">
                         <div className="flex items-center gap-2 mb-1">

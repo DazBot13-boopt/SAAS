@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Shield, Lock, Mail, ArrowRight, Ghost } from 'lucide-react';
 
@@ -138,5 +139,3 @@ export default function LoginPage() {
         </div>
     );
 }
-
-import Link from 'next/link';

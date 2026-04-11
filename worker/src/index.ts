@@ -209,7 +209,7 @@ const twitterWorker = new Worker(
     twitterWorkerHandler,
     { 
         connection: redisConnection,
-        concurrency: 1
+        concurrency: 20
     }
 );
 

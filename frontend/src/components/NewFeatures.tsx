@@ -68,18 +68,6 @@ interface Account {
     groupId?: string;
 }
 
-interface Group {
-    id: string;
-    name: string;
-    description?: string;
-    taskType: string;
-    isActive: boolean;
-    accounts?: Account[];
-    _count?: {
-        accounts: number;
-    };
-    createdAt: string;
-}
 
 interface Template {
     id: string;
@@ -133,28 +121,22 @@ interface NewFeaturesProps {
     onClose: () => void;
 }
 
-export default function NewFeatures({ accounts, selectedAccount: externalSelectedAccount, profileForm: externalProfileForm, onProfileFormChange, token, onClose }: NewFeaturesProps) {
-    const [activeTab, setActiveTab] = useState<'groups' | 'templates' | 'activities' | 'comments' | 'notifications' | 'stats'>('groups');
+export default function NewFeatures({ accounts: initialAccounts, selectedAccount: externalSelectedAccount, profileForm: externalProfileForm, onProfileFormChange, token, onClose }: NewFeaturesProps) {
+    const [activeTab, setActiveTab] = useState<'templates' | 'activities' | 'comments' | 'notifications' | 'stats'>('templates');
     
     // Data states
-    const [groups, setGroups] = useState<Group[]>([]);
+    const [accounts, setAccounts] = useState<Account[]>(initialAccounts);
     const [templates, setTemplates] = useState<Template[]>([]);
     const [activities, setActivities] = useState<Activity[]>([]);
     const [commentRequests, setCommentRequests] = useState<CommentRequest[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [unreadCount, setUnreadCount] = useState(0);
     
     // Modal states
-    const [showGroupModal, setShowGroupModal] = useState(false);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
     const [showCommentModal, setShowCommentModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
-    const [showAddAccountsModal, setShowAddAccountsModal] = useState(false);
-    const [selectedGroupForAccounts, setSelectedGroupForAccounts] = useState<string>('');
     const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
-    
-    // Form states
-    const [newGroup, setNewGroup] = useState({ name: '', description: '', taskType: 'warmup' });
-    const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
     const [newTemplate, setNewTemplate] = useState({ name: '', content: '', type: 'post', hashtags: '' });
     const [newCommentRequest, setNewCommentRequest] = useState({ postUrl: '', totalComments: 10 });
     const [profileForm, setProfileForm] = useState({ bio: '', niche: '' });
@@ -165,8 +147,6 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
     const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
     const [bannerImageFile, setBannerImageFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
-    
-    const [unreadCount, setUnreadCount] = useState(0);
     
     // Statistics states
     const [statsPeriod, setStatsPeriod] = useState<'7d' | '30d' | '90d'>('7d');
@@ -359,13 +339,6 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
     const fetchData = async () => {
         try {
             switch(activeTab) {
-                case 'groups':
-                    const groupsRes = await fetch('http://localhost:4000/api/groups', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    const groupsData = await groupsRes.json();
-                    setGroups(groupsData);
-                    break;
                 case 'templates':
                     const templatesRes = await fetch('http://localhost:4000/api/templates', {
                         headers: { 'Authorization': `Bearer ${token}` }
@@ -401,68 +374,6 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
             }
         } catch (error) {
             console.error('Error fetching data:', error);
-        }
-    };
-
-    // Group functions
-    const createGroup = async () => {
-        const res = await fetch('http://localhost:4000/api/groups', {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ ...newGroup })
-        });
-        if (res.ok) {
-            setShowGroupModal(false);
-            setNewGroup({ name: '', description: '', taskType: 'warmup' });
-            fetchData();
-        }
-    };
-
-    const deleteGroup = async (id: string) => {
-        await fetch(`http://localhost:4000/api/groups/${id}`, { 
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        fetchData();
-    };
-
-    const openAddAccountsModal = (groupId: string) => {
-        setSelectedGroupForAccounts(groupId);
-        setSelectedAccounts([]);
-        setShowAddAccountsModal(true);
-    };
-
-    const addAccountsToGroup = async () => {
-        if (!selectedGroupForAccounts || selectedAccounts.length === 0) return;
-
-        try {
-            // Update each account's groupId
-            const promises = selectedAccounts.map(accountId =>
-                fetch(`http://localhost:4000/api/twitter-accounts/${accountId}/group`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ groupId: selectedGroupForAccounts })
-                })
-            );
-
-            const results = await Promise.all(promises);
-            const successCount = results.filter(r => r.ok).length;
-
-            if (successCount > 0) {
-                alert(`✅ ${successCount} compte(s) ajouté(s) au groupe avec succès!`);
-                setShowAddAccountsModal(false);
-                setSelectedAccounts([]);
-                setSelectedGroupForAccounts('');
-                fetchData();
-            } else {
-                alert('❌ Erreur lors de l\'ajout des comptes');
-            }
-        } catch (error) {
-            console.error('Error adding accounts to group:', error);
-            alert('❌ Erreur lors de l\'ajout des comptes');
         }
     };
 
@@ -635,7 +546,6 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
     };
 
     const tabs = [
-        { id: 'groups', label: 'Groupes', icon: FolderTree },
         { id: 'templates', label: 'Templates', icon: FileText },
         { id: 'stats', label: 'Statistiques', icon: BarChart3 },
         { id: 'activities', label: 'Activités', icon: Clock },
@@ -687,144 +597,6 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
 
                 {/* Content */}
                 <AnimatePresence mode="wait">
-                    {/* GROUPS TAB */}
-                    {activeTab === 'groups' && (
-                        <motion.div
-                            key="groups"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                        >
-                            {/* Stats Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                                <div className="bg-gradient-to-br from-blue-600/20 to-blue-800/20 border border-blue-500/30 rounded-xl p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-blue-300 text-sm font-medium">Total Groupes</p>
-                                            <p className="text-3xl font-bold text-white mt-1">{groups.length}</p>
-                                        </div>
-                                        <FolderTree className="w-10 h-10 text-blue-400" />
-                                    </div>
-                                </div>
-                                <div className="bg-gradient-to-br from-green-600/20 to-green-800/20 border border-green-500/30 rounded-xl p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-green-300 text-sm font-medium">Groupes Actifs</p>
-                                            <p className="text-3xl font-bold text-white mt-1">{groups.filter(g => g.isActive).length}</p>
-                                        </div>
-                                        <CheckCircle className="w-10 h-10 text-green-400" />
-                                    </div>
-                                </div>
-                                <div className="bg-gradient-to-br from-purple-600/20 to-purple-800/20 border border-purple-500/30 rounded-xl p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-purple-300 text-sm font-medium">Total Comptes</p>
-                                            <p className="text-3xl font-bold text-white mt-1">{groups.reduce((sum, g) => sum + (g._count?.accounts || g.accounts?.length || 0), 0)}</p>
-                                        </div>
-                                        <Users className="w-10 h-10 text-purple-400" />
-                                    </div>
-                                </div>
-                                <div className="bg-gradient-to-br from-orange-600/20 to-orange-800/20 border border-orange-500/30 rounded-xl p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-orange-300 text-sm font-medium">Tâches</p>
-                                            <p className="text-3xl font-bold text-white mt-1">{new Set(groups.map(g => g.taskType)).size}</p>
-                                        </div>
-                                        <Activity className="w-10 h-10 text-orange-400" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h2 className="text-2xl font-bold flex items-center gap-2">
-                                        <FolderTree className="w-6 h-6 text-blue-400" />
-                                        Groupes de Comptes
-                                    </h2>
-                                    <p className="text-slate-400 text-sm mt-1">Organisez vos comptes par tâches et objectifs</p>
-                                </div>
-                                <button
-                                    onClick={() => setShowGroupModal(true)}
-                                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 px-6 py-3 rounded-xl flex items-center gap-2 font-medium shadow-lg shadow-blue-600/25 transition-all"
-                                >
-                                    <Plus className="w-5 h-5" />
-                                    Nouveau Groupe
-                                </button>
-                            </div>
-
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {groups.map(group => (
-                                    <motion.div 
-                                        key={group.id} 
-                                        whileHover={{ y: -4, scale: 1.02 }}
-                                        className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700/50 hover:border-blue-500/50 shadow-lg hover:shadow-blue-500/10 transition-all"
-                                    >
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="flex-1">
-                                                <h3 className="text-lg font-semibold text-white mb-1">{group.name}</h3>
-                                                <p className="text-sm text-slate-400 line-clamp-2">{group.description || 'Aucune description'}</p>
-                                            </div>
-                                            <button 
-                                                onClick={() => deleteGroup(group.id)} 
-                                                className="text-slate-500 hover:text-red-400 transition-colors p-1"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                        
-                                        <div className="space-y-2 mb-4">
-                                            <div className="flex items-center gap-2">
-                                                <span className="bg-blue-500/20 text-blue-300 text-xs px-3 py-1.5 rounded-lg font-medium border border-blue-500/30">
-                                                    {group.taskType}
-                                                </span>
-                                                <span className={`text-xs px-3 py-1.5 rounded-lg font-medium border ${
-                                                    group.isActive 
-                                                        ? 'bg-green-500/20 text-green-300 border-green-500/30' 
-                                                        : 'bg-slate-700/50 text-slate-400 border-slate-600/30'
-                                                }`}>
-                                                    {group.isActive ? '✓ Actif' : '✗ Inactif'}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center justify-between pt-3 border-t border-slate-700/50">
-                                            <div className="flex items-center gap-2 text-sm text-slate-400">
-                                                <Users className="w-4 h-4" />
-                                                <span className="font-medium">{group._count?.accounts || group.accounts?.length || 0}</span>
-                                                <span>comptes</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="text-xs text-slate-500">
-                                                    {new Date(group.createdAt).toLocaleDateString('fr-FR')}
-                                                </div>
-                                                <button
-                                                    onClick={() => openAddAccountsModal(group.id)}
-                                                    className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1"
-                                                    title="Ajouter des comptes"
-                                                >
-                                                    <Plus className="w-3 h-3" />
-                                                    Ajouter
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </div>
-
-                            {groups.length === 0 && (
-                                <motion.div 
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="text-center py-16 bg-slate-800/30 rounded-2xl border border-slate-700/50"
-                                >
-                                    <FolderTree className="w-20 h-20 mx-auto mb-4 text-slate-600" />
-                                    <p className="text-slate-400 text-lg mb-2">Aucun groupe créé</p>
-                                    <p className="text-slate-500 text-sm">Commencez par créer un groupe pour organiser vos comptes</p>
-                                </motion.div>
-                            )}
-                        </motion.div>
-                    )}
-
                     {/* TEMPLATES TAB */}
                     {activeTab === 'templates' && (
                         <motion.div
@@ -1268,127 +1040,6 @@ export default function NewFeatures({ accounts, selectedAccount: externalSelecte
                     )}
                 </AnimatePresence>
 
-                {/* MODALS */}
-                {/* Group Modal */}
-                {showGroupModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                        <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
-                            <h3 className="text-xl font-bold mb-4">Nouveau Groupe</h3>
-                            <input
-                                type="text"
-                                placeholder="Nom du groupe"
-                                value={newGroup.name}
-                                onChange={e => setNewGroup({...newGroup, name: e.target.value})}
-                                className="w-full bg-slate-700 rounded-lg px-4 py-2 mb-3"
-                            />
-                            <textarea
-                                placeholder="Description (optionnel)"
-                                value={newGroup.description}
-                                onChange={e => setNewGroup({...newGroup, description: e.target.value})}
-                                className="w-full bg-slate-700 rounded-lg px-4 py-2 mb-3"
-                                rows={2}
-                            />
-                            <select
-                                value={newGroup.taskType}
-                                onChange={e => setNewGroup({...newGroup, taskType: e.target.value})}
-                                className="w-full bg-slate-700 rounded-lg px-4 py-2 mb-4"
-                            >
-                                <option value="warmup">Warm-up</option>
-                                <option value="posting">Publication</option>
-                                <option value="commenting">Commentaires</option>
-                                <option value="engagement">Engagement</option>
-                            </select>
-                            <div className="flex gap-2">
-                                <button onClick={() => setShowGroupModal(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg">
-                                    Annuler
-                                </button>
-                                <button onClick={createGroup} className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
-                                    Créer
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Add Accounts to Group Modal */}
-                {showAddAccountsModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                        <div className="bg-slate-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-                            <h3 className="text-xl font-bold mb-4">Ajouter des Comptes au Groupe</h3>
-                            <p className="text-sm text-slate-400 mb-4">
-                                Sélectionnez les comptes à ajouter au groupe
-                            </p>
-                            
-                            <div className="flex-1 overflow-y-auto mb-4 space-y-2">
-                                {accounts
-                                    .filter((account: any) => account.groupId !== selectedGroupForAccounts)
-                                    .map((account: any) => (
-                                        <label
-                                            key={account.id}
-                                            className="flex items-center gap-3 p-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg cursor-pointer transition-all"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedAccounts.includes(account.id)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setSelectedAccounts([...selectedAccounts, account.id]);
-                                                    } else {
-                                                        setSelectedAccounts(selectedAccounts.filter(id => id !== account.id));
-                                                    }
-                                                }}
-                                                className="w-4 h-4 rounded border-slate-600 text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <div className="flex-1">
-                                                <div className="font-medium text-white">@{account.username}</div>
-                                                <div className="text-xs text-slate-400">
-                                                    {account.groupId ? `Groupe actuel: ${groups.find(g => g.id === account.groupId)?.name || 'Unknown'}` : 'Pas de groupe'}
-                                                </div>
-                                            </div>
-                                            <div className={`text-xs px-2 py-1 rounded ${
-                                                account.status === 'ACTIVE' || account.status === 'CONNECTED'
-                                                    ? 'bg-green-500/20 text-green-400'
-                                                    : 'bg-slate-600 text-slate-400'
-                                            }`}>
-                                                {account.status || 'IDLE'}
-                                            </div>
-                                        </label>
-                                    ))}
-                                
-                                {accounts.filter((a: any) => a.groupId !== selectedGroupForAccounts).length === 0 && (
-                                    <div className="text-center py-8 text-slate-500">
-                                        <p>Tous les comptes sont déjà dans ce groupe</p>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex items-center justify-between pt-4 border-t border-slate-700">
-                                <div className="text-sm text-slate-400">
-                                    {selectedAccounts.length} compte(s) sélectionné(s)
-                                </div>
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={() => {
-                                            setShowAddAccountsModal(false);
-                                            setSelectedAccounts([]);
-                                            setSelectedGroupForAccounts('');
-                                        }} 
-                                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg"
-                                    >
-                                        Annuler
-                                    </button>
-                                    <button 
-                                        onClick={addAccountsToGroup}
-                                        disabled={selectedAccounts.length === 0}
-                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
-                                    >
-                                        Ajouter {selectedAccounts.length > 0 ? `(${selectedAccounts.length})` : ''}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 {/* Template Modal */}
                 {showTemplateModal && (

@@ -23,6 +23,8 @@ model User {
   accounts              IGAccount[]
   notifications         Notification[]
   twitterAccounts       TwitterAccount[]
+  campaigns             Campaign[]
+  settings              GlobalSettings?
 }
 
 model IGAccount {
@@ -85,13 +87,14 @@ model TwitterAccount {
   updatedAt      DateTime       @updatedAt
   bannerImage    String?
   bio            String?
-  groupId        String
+  groupId        String?
   niche          String?
   profileImage   String?
   ct0            String?
+  autoMode       Boolean        @default(false)
   activityLogs   ActivityLog[]
   banAlerts      BanAlert[]
-  group          AccountGroup   @relation(fields: [groupId], references: [id])
+  group          AccountGroup?  @relation(fields: [groupId], references: [id])
   user           User           @relation(fields: [userId], references: [id])
   posts          TwitterPost[]
   proxy          TwitterProxy?
@@ -161,6 +164,7 @@ model AccountGroup {
   updatedAt   DateTime         @updatedAt
   user        User             @relation(fields: [userId], references: [id])
   accounts    TwitterAccount[]
+  campaigns   Campaign[]
 }
 
 model ContentTemplate {
@@ -212,6 +216,45 @@ model Notification {
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model Campaign {
+  id          String            @id @default(uuid())
+  name        String
+  description String?
+  isActive           Boolean           @default(true)
+  postsPerAccount    Int               @default(3)
+  commentsPerPost    Int               @default(5)
+  totalCommentsQuota Int               @default(50)
+  targetCommunities  String[]
+  contents           CampaignContent[]
+  groupId            String?
+  group              AccountGroup?     @relation(fields: [groupId], references: [id])
+  userId             String
+  user               User              @relation(fields: [userId], references: [id])
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
+
+model GlobalSettings {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id])
+  postsPerDayLimit      Int      @default(3)
+  commentsPerPostLimit  Int      @default(5)
+  followPerDayLimit     Int      @default(20)
+  autoSyncMetadata      Boolean  @default(true)
+  updatedAt             DateTime @updatedAt
+}
+
+model CampaignContent {
+  id         String   @id @default(uuid())
+  caption    String?
+  mediaUrls  String[]
+  linkUrl    String?
+  usedCount  Int      @default(0)
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
 }
 
 enum UserRole {

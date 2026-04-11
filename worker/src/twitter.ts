@@ -1256,6 +1256,29 @@ const AUTO_TWEETS = [
     "Can't wait to show you what I've been working on! 😘✨",
     "Premium content now available! Don't miss out 💎🔥",
 ];
+async function downloadImage(url: string, prefix: string): Promise<string | null> {
+    return new Promise((resolve) => {
+        const tempPath = path.join('/tmp', `${prefix}-${Date.now()}.jpg`);
+        const file = fs.createWriteStream(tempPath);
+        
+        const protocol = url.startsWith('https') ? https : http;
+        
+        protocol.get(url, { timeout: 15000 }, (response) => {
+            if (response.statusCode === 200) {
+                response.pipe(file);
+                file.on('finish', () => {
+                    file.close();
+                    resolve(tempPath);
+                });
+            } else {
+                resolve(null);
+            }
+        }).on('error', (err) => {
+            console.error('Download error:', err);
+            resolve(null);
+        });
+    });
+}
 
 async function doAutoPost(page: Page, emitLog: (msg: string) => void, config: any, username: string) {
     emitLog("📝 Auto-Post : Publication d'un tweet...");
@@ -1366,9 +1389,27 @@ async function doAutoPost(page: Page, emitLog: (msg: string) => void, config: an
         
         // Add media if URLs provided
         if (config?.mediaUrls && config.mediaUrls.length > 0) {
-            emitLog(`📸 Adding ${config.mediaUrls.length} media file(s)...`);
-            // Note: Media upload would require file input handling
-            // For now, we'll just post with text and link
+            emitLog(`📸 Traitement de ${config.mediaUrls.length} fichier(s) média...`);
+            const downloadedPaths: string[] = [];
+            
+            try {
+                for (const url of config.mediaUrls.slice(0, 4)) { // Twitter limit: 4 images
+                    const filePath = await downloadImage(url, 'post');
+                    if (filePath) downloadedPaths.push(filePath);
+                }
+
+                if (downloadedPaths.length > 0) {
+                    emitLog(`📤 Injection de ${downloadedPaths.length} média...`);
+                    const fileInput = page.locator('input[data-testid="fileInput"]').first();
+                    await fileInput.setInputFiles(downloadedPaths).catch(e => emitLog(`⚠️ Erreur média: ${e.message}`));
+                    await sleep(3000);
+                }
+            } catch (err: any) {
+                emitLog(`⚠️ Erreur lors du traitement média: ${err.message}`);
+            } finally {
+                // We'll delete them after the final post click or in a cleanup
+                // For now, let's keep track locally to delete after post
+            }
         }
         
         // Click Tweet button

@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { PrismaClient, AccountStatus } from '@prisma/client';
+import { PrismaClient, AccountStatus, UserRole } from '@prisma/client';
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import multer from 'multer';
@@ -12,6 +12,8 @@ import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { authenticateToken, isAdmin, AuthRequest } from './middleware/auth';
+import { upload } from './middleware/upload';
+import { startOrchestrator } from './services/orchestrator';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'ghost-content-secret-key-2024';
 
@@ -38,41 +40,6 @@ const io = new Server(httpServer, {
 
 app.use(cors());
 app.use(express.json());
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-    destination: (req: any, file: any, cb: any) => {
-        const uploadDir = path.join(__dirname, '..', 'uploads');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
-    },
-    filename: (req: any, file: any, cb: any) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, `profile-${uniqueSuffix}${path.extname(file.originalname)}`);
-    }
-});
-
-const fileFilter = (req: any, file: any, cb: any) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
-        return cb(null, true);
-    } else {
-        cb(new Error('Seuls les fichiers image sont autorisés (JPEG, PNG, GIF, WEBP)'));
-    }
-};
-
-const upload = multer({
-    storage: storage,
-    limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
-    },
-    fileFilter: fileFilter
-});
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
@@ -157,6 +124,63 @@ app.post('/api/auth/login', async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ error: 'Erreur lors de la connexion' });
+    }
+});
+
+// --- SETTINGS ENDPOINTS ---
+
+/**
+ * Get global settings
+ */
+app.get('/api/settings', authenticateToken, async (req: AuthRequest, res) => {
+    const userId = req.user?.id || 'temp-user-id';
+    try {
+        let settings = await prisma.globalSettings.findUnique({
+            where: { userId }
+        });
+
+        if (!settings) {
+            settings = await prisma.globalSettings.create({
+                data: {
+                    userId,
+                    postsPerDayLimit: 3,
+                    commentsPerPostLimit: 5
+                }
+            });
+        }
+        res.json(settings);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Update global settings
+ */
+app.post('/api/settings', authenticateToken, async (req: AuthRequest, res) => {
+    const userId = req.user?.id || 'temp-user-id';
+    const { postsPerDayLimit, commentsPerPostLimit, followPerDayLimit, autoSyncMetadata } = req.body;
+
+    try {
+        const settings = await prisma.globalSettings.upsert({
+            where: { userId },
+            update: {
+                ...(postsPerDayLimit !== undefined && { postsPerDayLimit }),
+                ...(commentsPerPostLimit !== undefined && { commentsPerPostLimit }),
+                ...(followPerDayLimit !== undefined && { followPerDayLimit }),
+                ...(autoSyncMetadata !== undefined && { autoSyncMetadata })
+            },
+            create: {
+                userId,
+                postsPerDayLimit: postsPerDayLimit || 3,
+                commentsPerPostLimit: commentsPerPostLimit || 5,
+                followPerDayLimit: followPerDayLimit || 20,
+                autoSyncMetadata: autoSyncMetadata !== undefined ? autoSyncMetadata : true
+            }
+        });
+        res.json(settings);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -353,26 +377,6 @@ app.post('/api/twitter-accounts', authenticateToken, async (req: AuthRequest, re
         return res.status(400).json({ error: 'auth_token cookie is required' });
     }
 
-    // Validate groupId - now required
-    if (!groupId) {
-        return res.status(400).json({ 
-            error: 'groupId is required. Every account must belong to a group.' 
-        });
-    }
-
-    // Verify group exists
-    try {
-        const group = await prisma.accountGroup.findUnique({
-            where: { id: groupId }
-        });
-        
-        if (!group) {
-            return res.status(400).json({ error: 'Group not found' });
-        }
-    } catch (error) {
-        return res.status(400).json({ error: 'Invalid group ID' });
-    }
-
     // Extract ct0 from cookies if not provided separately
     const ct0Cookie = cookies.find((cookie: any) => cookie.name === 'ct0');
     const finalCt0 = ct0 || (ct0Cookie ? ct0Cookie.value : null);
@@ -389,12 +393,7 @@ app.post('/api/twitter-accounts', authenticateToken, async (req: AuthRequest, re
             });
         }
 
-        // Ensure temp user exists before creating Twitter account
-        await prisma.user.upsert({
-            where: { id: 'temp-user-id' },
-            update: {},
-            create: { id: 'temp-user-id', email: 'admin@duupflow.com', password: 'password' }
-        });
+        const userId = (req as AuthRequest).user?.id || 'temp-user-id';
 
         const newAccount = await prisma.twitterAccount.create({
             data: {
@@ -405,9 +404,7 @@ app.post('/api/twitter-accounts', authenticateToken, async (req: AuthRequest, re
                 type: type || 'MAIN',
                 status: 'ACTIVE', // Active since we have valid cookies
                 sessionCookies: cookies,
-                groupId, // Required - account must belong to a group
-                // TODO: Add ct0 field after Prisma client regeneration
-                userId: 'temp-user-id',
+                userId,
                 proxy: proxy ? {
                     create: {
                         host: proxy.host,
@@ -1107,6 +1104,154 @@ app.post('/api/ban-alerts', async (req, res) => {
     }
 });
 
+// --- CAMPAIGNS API ---
+
+/**
+ * Get all campaigns
+ */
+app.get('/api/campaigns', async (req, res) => {
+    try {
+        const campaigns = await prisma.campaign.findMany({
+            where: { userId: 'temp-user-id' }, // Placeholder for auth.userId
+            include: { contents: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(campaigns);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Create a new campaign
+ */
+app.post('/api/campaigns', authenticateToken, async (req: AuthRequest, res) => {
+    const { name, description, postsPerAccount, commentsPerPost, totalCommentsQuota, targetCommunities } = req.body;
+    const userId = req.user?.id || 'temp-user-id';
+    try {
+        const campaign = await prisma.campaign.create({
+            data: {
+                name,
+                description,
+                userId,
+                groupId: req.body.groupId || null,
+                postsPerAccount: postsPerAccount !== undefined ? parseInt(postsPerAccount) : 3,
+                commentsPerPost: commentsPerPost !== undefined ? parseInt(commentsPerPost) : 5,
+                totalCommentsQuota: totalCommentsQuota !== undefined ? parseInt(totalCommentsQuota) : 50,
+                targetCommunities: targetCommunities || []
+            }
+        });
+        res.status(201).json(campaign);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+/**
+ * Update campaign settings
+ */
+app.patch('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res) => {
+    const { id } = req.params;
+    const { name, description, postsPerAccount, commentsPerPost, totalCommentsQuota, targetCommunities, isActive } = req.body;
+    try {
+        const campaign = await prisma.campaign.update({
+            where: { id },
+            data: {
+                ...(name && { name }),
+                ...(description !== undefined && { description }),
+                ...(postsPerAccount !== undefined && { postsPerAccount: parseInt(postsPerAccount) }),
+                ...(commentsPerPost !== undefined && { commentsPerPost: parseInt(commentsPerPost) }),
+                ...(totalCommentsQuota !== undefined && { totalCommentsQuota: parseInt(totalCommentsQuota) }),
+                ...(targetCommunities !== undefined && { targetCommunities }),
+                ...(isActive !== undefined && { isActive }),
+                ...(req.body.groupId !== undefined && { groupId: req.body.groupId })
+            }
+        });
+        res.json(campaign);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+/**
+ * Master Play/Pause: Toggle Auto-Mode for all accounts
+ */
+app.post('/api/orchestrator/toggle-all', authenticateToken, async (req: AuthRequest, res) => {
+    const { autoMode } = req.body;
+    const userId = req.user?.id || 'temp-user-id';
+
+    try {
+        await prisma.twitterAccount.updateMany({
+            where: { userId },
+            data: { autoMode }
+        });
+        
+        // Trigger orchestrator instantly if turning ON
+        if (autoMode) {
+            startOrchestrator();
+        }
+
+        res.json({ success: true, message: `Auto-Mode globally set to ${autoMode}` });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Sync Account Metadata from X
+ */
+app.post('/api/twitter-accounts/:id/sync', authenticateToken, async (req: AuthRequest, res) => {
+    const { id } = req.params;
+    try {
+        const job = await twitterQueue.add('syncProfile', { accountId: id });
+        res.json({ jobId: job.id, message: "Sync job queued" });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Add content to a campaign
+ */
+app.post('/api/campaigns/:id/content', upload.array('mediaFiles'), async (req: any, res) => {
+    const { id } = req.params;
+    const { caption, linkUrl } = req.body;
+    
+    try {
+        const mediaUrls = req.files ? req.files.map((f: any) => `http://localhost:${port}/uploads/${f.filename}`) : [];
+        
+        const content = await prisma.campaignContent.create({
+            data: {
+                campaignId: id,
+                caption,
+                linkUrl,
+                mediaUrls
+            }
+        });
+        res.status(201).json(content);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+/**
+ * Toggle account Auto-Mode
+ */
+app.patch('/api/twitter-accounts/:id/auto-mode', async (req, res) => {
+    const { id } = req.params;
+    const { autoMode } = req.body;
+    
+    try {
+        const account = await prisma.twitterAccount.update({
+            where: { id },
+            data: { autoMode }
+        });
+        res.json(account);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 /**
  * Get notifications
  */
@@ -1201,11 +1346,12 @@ io.on('connection', (socket) => {
             if (postActions.includes(data.action) && data.postUrl && account && account.type === 'MAIN') {
                 console.log(`📣 Orchestration: Post detected from ${account.username}. Triggering support engagement...`);
                 
-                // Find support accounts in the same group
+                // Find ALL support accounts for this user (Global Support Pool)
                 const supportAccounts = await prisma.twitterAccount.findMany({
                     where: {
-                        groupId: account.groupId || 'default', // fallback
+                        userId: account.userId,
                         type: 'SUPPORT',
+                        groupId: account.groupId, // Restrict to same group
                         status: 'ACTIVE',
                         id: { not: account.id }
                     }
@@ -1371,10 +1517,10 @@ async function init() {
     });
     
     httpServer.listen(port, () => {
-        console.log(`Backend API & Queue running on http://localhost:${port}`);
+        console.log(`🚀 Server ready at http://localhost:${port}`);
+        // Start the Ghost Mastermind Orchestrator
+        startOrchestrator();
     });
 }
 
 init().catch(console.error);
-
-// Trigger reload for .env
