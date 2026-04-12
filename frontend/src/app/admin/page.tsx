@@ -7,6 +7,7 @@ import {
     AtSign, Clock, ShieldCheck, ChevronRight, BarChart3,
     Ghost, LogOut
 } from 'lucide-react';
+import { API_URL } from '../../utils/apiConfig';
 
 interface User {
     id: string;
@@ -36,7 +37,7 @@ export default function AdminPage() {
         }
 
         try {
-            const res = await fetch('http://localhost:4000/api/admin/users', {
+            const res = await fetch(`${API_URL}/admin/users`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -61,7 +62,7 @@ export default function AdminPage() {
             const expiresAt = new Date();
             expiresAt.setDate(expiresAt.getDate() + days);
 
-            const res = await fetch(`http://localhost:4000/api/admin/users/${userId}/status`, {
+            const res = await fetch(`${API_URL}/admin/users/${userId}/status`, {
                 method: 'PATCH',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -91,7 +92,7 @@ export default function AdminPage() {
         expiresAt.setDate(expiresAt.getDate() + days);
 
         try {
-            const res = await fetch(`http://localhost:4000/api/admin/users/${userId}/subscription`, {
+            const res = await fetch(`${API_URL}/admin/users/${userId}/subscription`, {
                 method: 'PATCH',
                 headers: { 
                     'Content-Type': 'application/json',

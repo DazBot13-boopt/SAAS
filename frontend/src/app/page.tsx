@@ -61,6 +61,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NewFeatures from '../components/NewFeatures';
+import { API_URL, SOCKET_URL, API_BASE_URL } from '../utils/apiConfig';
 
 // --- Types ---
 interface Account {
@@ -144,7 +145,7 @@ export default function Dashboard() {
     const [screenshots, setScreenshots] = useState<Record<string, string>>({});
     const [activeAccount, setActiveAccount] = useState('');
     const [viewMode, setViewMode] = useState<'SINGLE' | 'GRID' | 'PROXIES' | 'ACCOUNTS' | 'POSTS' | 'STATS' | 'ORCHESTRATION' | 'CAMPAIGNS' | 'SETTINGS' | 'GROUPS'>('SINGLE');
-    const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000') + '/api';
+    const API_BASE = API_URL;
     const [globalSettings, setGlobalSettings] = useState({
         postIntervalValue: 30,
         postIntervalUnit: 'MINUTES' as 'MINUTES' | 'HOURS',
@@ -365,7 +366,7 @@ export default function Dashboard() {
     }, [platform]);
 
     useEffect(() => {
-        const socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000');
+        const socket = io(SOCKET_URL);
         
         socket.on('ui_log', (data) => setLogs((prev) => [
             {...data, timestamp: new Date()}, 
@@ -772,7 +773,7 @@ export default function Dashboard() {
 
     const handleDeleteAccount = async (id: string) => {
         if (!confirm("Voulez-vous vraiment détruire ce nœud de la base de données ?")) return;
-        const url = platform === 'TWITTER' ? `http://localhost:4000/api/twitter-accounts/${id}` : `http://localhost:4000/api/accounts/${id}`;
+        const url = platform === 'TWITTER' ? `${API_BASE}/twitter-accounts/${id}` : `${API_BASE}/accounts/${id}`;
         const response = await fetch(url, { 
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }

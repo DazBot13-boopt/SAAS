@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Shield, Lock, Mail, ArrowRight, Ghost } from 'lucide-react';
+import { API_URL } from '../../utils/apiConfig';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -18,7 +19,7 @@ export default function LoginPage() {
         setError('');
 
         try {
-            const res = await fetch('http://localhost:4000/api/auth/login', {
+            const res = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),

@@ -1,6 +1,6 @@
-'use client';
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
+import { API_URL, SOCKET_URL } from '../utils/apiConfig';
 import {
     FolderTree,
     FileText,
@@ -169,7 +169,7 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
         setStatsLoading(true);
         try {
             // Fetch activities
-            const activitiesRes = await fetch('http://localhost:4000/api/activities?limit=1000', {
+            const activitiesRes = await fetch(`${API_URL}/activities?limit=1000`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const activities = await activitiesRes.json();
@@ -291,7 +291,7 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
 
     // Real-time notifications
     useEffect(() => {
-        const socket = io('http://localhost:4000', {
+        const socket = io(SOCKET_URL, {
             auth: { token }
         });
         
@@ -341,28 +341,28 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
         try {
             switch(activeTab) {
                 case 'templates':
-                    const templatesRes = await fetch('http://localhost:4000/api/templates', {
+                    const templatesRes = await fetch(`${API_URL}/templates`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     const templatesData = await templatesRes.json();
                     setTemplates(templatesData);
                     break;
                 case 'activities':
-                    const activitiesRes = await fetch('http://localhost:4000/api/activities?limit=100', {
+                    const activitiesRes = await fetch(`${API_URL}/activities?limit=100`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     const activitiesData = await activitiesRes.json();
                     setActivities(activitiesData);
                     break;
                 case 'comments':
-                    const commentsRes = await fetch('http://localhost:4000/api/comment-requests', {
+                    const commentsRes = await fetch(`${API_URL}/comment-requests`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     const commentsData = await commentsRes.json();
                     setCommentRequests(commentsData);
                     break;
                 case 'notifications':
-                    const notifRes = await fetch('http://localhost:4000/api/notifications', {
+                    const notifRes = await fetch(`${API_URL}/notifications`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     const notifData = await notifRes.json();
@@ -380,7 +380,7 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
 
     // Template functions
     const createTemplate = async () => {
-        const res = await fetch('http://localhost:4000/api/templates', {
+        const res = await fetch(`${API_URL}/templates`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
@@ -399,7 +399,7 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
     };
 
     const deleteTemplate = async (id: string) => {
-        await fetch(`http://localhost:4000/api/templates/${id}`, { 
+        await fetch(`${API_URL}/templates/${id}`, { 
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -408,7 +408,7 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
 
     // Comment request functions
     const createCommentRequest = async () => {
-        const res = await fetch('http://localhost:4000/api/comment-requests', {
+        const res = await fetch(`${API_URL}/comment-requests`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
@@ -447,7 +447,7 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
             }
 
             // Update profile
-            await fetch(`http://localhost:4000/api/twitter-accounts/${selectedAccount.id}/profile`, {
+            await fetch(`${API_URL}/twitter-accounts/${selectedAccount.id}/profile`, {
                 method: 'PATCH',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -476,7 +476,7 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
 
     // Mark notification as read
     const markAsRead = async (id: string) => {
-        await fetch(`http://localhost:4000/api/notifications/${id}/read`, {
+        await fetch(`${API_URL}/notifications/${id}/read`, {
             method: 'PATCH',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -532,7 +532,7 @@ export default function NewFeatures({ accounts: initialAccounts, selectedAccount
         formData.append('image', file);
         formData.append('type', type);
 
-        const response = await fetch('http://localhost:4000/api/upload', {
+        const response = await fetch(`${API_URL}/upload`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
             body: formData,
