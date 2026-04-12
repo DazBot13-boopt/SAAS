@@ -117,8 +117,8 @@ interface NewFeaturesProps {
         niche: string;
     };
     onProfileFormChange?: (form: any) => void;
-    token: string | null;
-    onClose: () => void;
+    token?: string | null;
+    onClose?: () => void;
 }
 
 export default function NewFeatures({ accounts: initialAccounts, selectedAccount: externalSelectedAccount, profileForm: externalProfileForm, onProfileFormChange, token, onClose }: NewFeaturesProps) {
