@@ -93,7 +93,9 @@ export default function NewFeatures({
     socket.on('notification', () => {
       fetchNotifications();
     });
-    return () => socket.disconnect();
+    return () => {
+      socket.disconnect();
+    };
   }, [token]);
 
   const fetchNotifications = async () => {
