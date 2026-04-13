@@ -106,8 +106,10 @@ model TwitterProxy {
   id        String         @id @default(uuid())
   host      String
   port      Int
+  protocol  String         @default("http")
   username  String?
   password  String?
+  rotateIpUrl String?
   accountId String         @unique
   account   TwitterAccount @relation(fields: [accountId], references: [id])
 }

@@ -11,6 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import https from 'https';
 import http from 'http';
+import { URL as NodeURL } from 'url';
 
 const logFile = path.join(process.cwd(), 'worker_debug.log');
 const debugLog = (msg: string) => {
@@ -45,6 +46,71 @@ chromium.use(stealth());
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const randomRange = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1) + min);
 const randomFloat = (min: number, max: number) => Math.random() * (max - min) + min;
+
+/** Accept URL (ex. https://x.com/i/communities/1868017631049265441), query param, or raw id */
+function extractCommunityId(communityUrl: string): string | null {
+    const raw = String(communityUrl || '').trim();
+    if (!raw) return null;
+
+    const fromPath = raw.match(/communities\/(\d+)/)?.[1];
+    if (fromPath) return fromPath;
+
+    const fromQuery = raw.match(/[?&]community_id=(\d+)/)?.[1];
+    if (fromQuery) return fromQuery;
+
+    if (/^\d{6,}$/.test(raw)) return raw;
+
+    return null;
+}
+
+function buildTwitterProxyServer(proxy: { host: string; port: number; protocol?: string | null }): string {
+    const scheme = proxy.protocol === 'socks5' ? 'socks5' : 'http';
+    return `${scheme}://${proxy.host}:${proxy.port}`;
+}
+
+/** GET (ex. API fournisseur) pour changer l’IP avant d’ouvrir Chromium */
+function getHttpUrl(urlStr: string): Promise<{ statusCode?: number }> {
+    return new Promise((resolve, reject) => {
+        const u = new NodeURL(urlStr);
+        const lib = u.protocol === 'https:' ? https : http;
+        const req = lib.get(urlStr, (res) => {
+            res.on('data', () => {});
+            res.on('end', () => resolve({ statusCode: res.statusCode }));
+        });
+        req.setTimeout(35000, () => {
+            req.destroy();
+            reject(new Error('timeout'));
+        });
+        req.on('error', reject);
+    });
+}
+
+/**
+ * Si un proxy est configuré et qu’une URL de rotation existe (DB ou PROXY_ROTATE_URL),
+ * appelle l’API avant createStealthSession.
+ */
+async function callRotateIpIfConfigured(
+    emitLog: (msg: string) => void,
+    proxy: { rotateIpUrl?: string | null } | null | undefined
+): Promise<void> {
+    if (!proxy) return;
+    const url =
+        (proxy.rotateIpUrl && String(proxy.rotateIpUrl).trim()) ||
+        (process.env.PROXY_ROTATE_URL || '').trim();
+    if (!url) return;
+    if (!url.startsWith('http')) {
+        emitLog('⚠️ URL de rotation IP invalide (http/https requis).');
+        return;
+    }
+    emitLog('🔄 Appel API rotation IP (avant le navigateur)...');
+    try {
+        const { statusCode } = await getHttpUrl(url);
+        emitLog(`✅ Rotation IP: HTTP ${statusCode ?? '?'}`);
+        await sleep(4000);
+    } catch (e: any) {
+        emitLog(`⚠️ Rotation IP: ${e.message?.split('\n')[0] || e} — on continue.`);
+    }
+}
 
 /** List of realistic mobile UA - iPhone 14 / 15 & Pixel */
 const MOBILE_USER_AGENTS = [
@@ -1466,9 +1532,9 @@ async function doAutoPost(page: Page, emitLog: (msg: string) => void, config: an
                 try {
                     let composeUrl = 'https://x.com/compose/post';
                     if (config?.communityUrl) {
-                        const communityMatch = String(config.communityUrl).match(/communities\/(\d+)/);
-                        if (communityMatch?.[1]) {
-                            composeUrl = `https://x.com/compose/post?community_id=${communityMatch[1]}`;
+                        const communityId = extractCommunityId(String(config.communityUrl));
+                        if (communityId) {
+                            composeUrl = `https://x.com/compose/post?community_id=${communityId}`;
                         } else {
                             composeUrl = config.communityUrl;
                         }
@@ -1946,6 +2012,57 @@ async function doJoinCommunity(page: Page, emitLog: (msg: string) => void, confi
     }
 }
 
+/**
+ * Ouvre la page /i/communities/{id} et clique Join / Rejoindre si présent.
+ * Si déjà membre (pas de bouton), on continue vers le post.
+ */
+async function ensureJoinCommunityIfNeeded(
+    page: Page,
+    emitLog: (msg: string) => void,
+    communityUrl: string | undefined
+): Promise<void> {
+    if (!communityUrl) return;
+    const id = extractCommunityId(String(communityUrl));
+    if (!id) {
+        emitLog('⚠️ Impossible d’extraire un community_id — étape join ignorée.');
+        return;
+    }
+
+    const communityPageUrl = `https://x.com/i/communities/${id}`;
+    emitLog(`👥 Vérification adhésion (communauté ${id})…`);
+
+    try {
+        await page.goto(communityPageUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await sleep(randomRange(2500, 4500));
+        await dismissPopups(page, emitLog);
+
+        const joinBtn = page
+            .locator(
+                [
+                    'button:has-text("Join")',
+                    'button:has-text("Rejoindre")',
+                    'button:has-text("Request to join")',
+                    'button:has-text("Demander")',
+                    'a:has-text("Join")',
+                    'a:has-text("Rejoindre")',
+                ].join(', ')
+            )
+            .first();
+
+        if (await joinBtn.isVisible({ timeout: 8000 }).catch(() => false)) {
+            const label = (await joinBtn.innerText().catch(() => '')) || 'join';
+            await humanClick(page, joinBtn);
+            emitLog(`✅ Adhésion demandée / cliquée (${label.trim().slice(0, 48)})`);
+            await sleep(randomRange(3000, 6000));
+            await dismissPopups(page, emitLog);
+        } else {
+            emitLog('ℹ️ Aucun bouton Join visible — souvent déjà membre ou UI différente ; on tente le post.');
+        }
+    } catch (e: any) {
+        emitLog(`⚠️ Étape join communauté: ${e.message?.split('\n')[0] || e} — on tente quand même le post.`);
+    }
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 
 export const twitterWorkerHandler = async (job: any) => {
@@ -1968,7 +2085,7 @@ export const twitterWorkerHandler = async (job: any) => {
     await prisma.twitterAccount.update({ where: { id: accountId }, data: { status: 'ACTIVE' } });
 
     const proxyConfig = account.proxy ? {
-        server: `http://${account.proxy.host}:${account.proxy.port}`,
+        server: buildTwitterProxyServer(account.proxy as { host: string; port: number; protocol?: string | null }),
         username: account.proxy.username || undefined,
         password: account.proxy.password || undefined,
     } : undefined;
@@ -1979,6 +2096,10 @@ export const twitterWorkerHandler = async (job: any) => {
     const existingSession = await sessionManager.loadSession(username);
     const existingDeviceInfo = existingSession?.deviceInfo;
     const existingFingerprint = existingSession?.fingerprint;
+
+    if (account.proxy) {
+        await callRotateIpIfConfigured(emitLog, account.proxy);
+    }
 
     emitLog("🔍 Création du profil de périphérique mobile indétectable...");
     const session = await createStealthSession(proxyConfig, emitLog, existingDeviceInfo, existingFingerprint);
@@ -2105,6 +2226,9 @@ export const twitterWorkerHandler = async (job: any) => {
                 await doAutoComment(page, emitLog, config);
                 break;
             case 'autoPost':
+                if (config?.communityUrl) {
+                    await ensureJoinCommunityIfNeeded(page, emitLog, config.communityUrl);
+                }
                 const autoPostResult = await doAutoPost(page, emitLog, config, username);
                 if (autoPostResult?.postUrl) job.data.postUrl = autoPostResult.postUrl;
                 break;
@@ -2115,6 +2239,9 @@ export const twitterWorkerHandler = async (job: any) => {
                     // @ts-ignore
                     if (schedPostResult?.postUrl) job.data.postUrl = schedPostResult.postUrl;
                 } else {
+                    if (config?.communityUrl) {
+                        await ensureJoinCommunityIfNeeded(page, emitLog, config.communityUrl);
+                    }
                     const autoPostResult2 = await doAutoPost(page, emitLog, config, username);
                     if (autoPostResult2?.postUrl) job.data.postUrl = autoPostResult2.postUrl;
                 }
@@ -2123,6 +2250,7 @@ export const twitterWorkerHandler = async (job: any) => {
                 await doAutoComment(page, emitLog, { ...config, count: config?.count || 5 });
                 break;
             case 'postCommunity':
+                await ensureJoinCommunityIfNeeded(page, emitLog, config?.communityUrl);
                 const communityPostResult = await doAutoPost(page, emitLog, config, username);
                 if (communityPostResult?.postUrl) job.data.postUrl = communityPostResult.postUrl;
                 break;

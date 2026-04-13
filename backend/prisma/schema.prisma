@@ -106,8 +106,12 @@ model TwitterProxy {
   id        String         @id @default(uuid())
   host      String
   port      Int
+  /// "http" | "socks5" — utilisé par Playwright (http://host:port ou socks5://host:port)
+  protocol  String         @default("http")
   username  String?
   password  String?
+  /// GET optionnel (ex. API fournisseur) appelé avant chaque session si un proxy est défini
+  rotateIpUrl String?
   accountId String         @unique
   account   TwitterAccount @relation(fields: [accountId], references: [id])
 }

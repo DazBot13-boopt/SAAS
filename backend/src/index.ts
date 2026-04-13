@@ -431,8 +431,10 @@ app.post('/api/twitter-accounts', authenticateToken, async (req: AuthRequest, re
                     create: {
                         host: proxy.host,
                         port: parseInt(proxy.port),
+                        protocol: proxy.protocol === 'socks5' ? 'socks5' : 'http',
                         username: proxy.username,
-                        password: proxy.password
+                        password: proxy.password,
+                        rotateIpUrl: proxy.rotateIpUrl || null
                     }
                 } : undefined
             },
@@ -489,8 +491,10 @@ app.put('/api/twitter-accounts/:id', authenticateToken, async (req: AuthRequest,
                     data: {
                         host: proxy.host,
                         port: parseInt(proxy.port),
+                        protocol: proxy.protocol === 'socks5' ? 'socks5' : 'http',
                         username: proxy.username,
-                        password: proxy.password
+                        password: proxy.password,
+                        ...(proxy.rotateIpUrl !== undefined ? { rotateIpUrl: proxy.rotateIpUrl || null } : {})
                     }
                 });
             } else {
@@ -499,8 +503,10 @@ app.put('/api/twitter-accounts/:id', authenticateToken, async (req: AuthRequest,
                         accountId: id,
                         host: proxy.host,
                         port: parseInt(proxy.port),
+                        protocol: proxy.protocol === 'socks5' ? 'socks5' : 'http',
                         username: proxy.username,
-                        password: proxy.password
+                        password: proxy.password,
+                        rotateIpUrl: proxy.rotateIpUrl || null
                     }
                 });
             }
@@ -1288,8 +1294,12 @@ app.post('/api/campaigns', authenticateToken, async (req: AuthRequest, res) => {
  */
 app.patch('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res) => {
     const { id } = req.params;
+    const userId = req.user?.id || 'temp-user-id';
     const { name, description, type, postsPerAccount, commentsPerPost, totalCommentsQuota, targetCommunities, isActive } = req.body;
     try {
+        const existing = await prisma.campaign.findFirst({ where: { id, userId } });
+        if (!existing) return res.status(404).json({ error: 'Campagne introuvable' });
+
         const campaign = await prisma.campaign.update({
             where: { id },
             data: {
@@ -1307,6 +1317,26 @@ app.patch('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res)
             }
         });
         res.json(campaign);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+/**
+ * Delete a campaign and its content pool
+ */
+app.delete('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res) => {
+    const { id } = req.params;
+    const userId = req.user?.id || 'temp-user-id';
+    try {
+        const existing = await prisma.campaign.findFirst({ where: { id, userId } });
+        if (!existing) return res.status(404).json({ error: 'Campagne introuvable' });
+
+        await prisma.$transaction([
+            prisma.campaignContent.deleteMany({ where: { campaignId: id } }),
+            prisma.campaign.delete({ where: { id } })
+        ]);
+        res.json({ success: true });
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }

@@ -257,9 +257,9 @@ async function triggerCampaignPost(account: any, campaign: any) {
 
         const content = campaignWithContent.contents[Math.floor(Math.random() * campaignWithContent.contents.length)];
         
-        // Decide target community: content-specific first, then campaign-level random
+        // Always prefer posting to community when one is available
         let targetCommunity = content.targetCommunity;
-        if (!targetCommunity && campaign.targetCommunities && campaign.targetCommunities.length > 0 && Math.random() < 0.70) {
+        if (!targetCommunity && campaign.targetCommunities && campaign.targetCommunities.length > 0) {
             targetCommunity = campaign.targetCommunities[Math.floor(Math.random() * campaign.targetCommunities.length)];
         }
 
@@ -267,7 +267,7 @@ async function triggerCampaignPost(account: any, campaign: any) {
         
         await twitterQueue.add(`auto-post-${account.username}-${Date.now()}`, {
             accountId: account.id,
-            action: 'autoPost',
+            action: targetCommunity ? 'postCommunity' : 'autoPost',
             username: account.username,
             config: {
                 content: content.caption,

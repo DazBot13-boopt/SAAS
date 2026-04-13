@@ -73,7 +73,7 @@ interface Account {
     isOnline?: boolean;
     type?: string;
     email?: string;
-    proxy?: { host: string; port: number; username?: string; password?: string };
+    proxy?: { host: string; port: number; username?: string; password?: string; protocol?: string; rotateIpUrl?: string | null };
     profileImage?: string;
     bio?: string;
     bannerImage?: string;
@@ -91,6 +91,14 @@ interface Group {
     schedule?: any;
     isActive: boolean;
     accounts?: Account[];
+}
+
+/** Si l'utilisateur colle "host:port" dans le champ host */
+function parseProxyHostPortInput(hostField: string): { host: string; port: string } | null {
+    const t = hostField.trim();
+    const m = /^([^:/\s]+):(\d{2,5})$/.exec(t);
+    if (m) return { host: m[1], port: m[2] };
+    return null;
 }
 
 interface Template {
@@ -193,6 +201,17 @@ export default function Dashboard() {
     const [newCampaignGroupId, setNewCampaignGroupId] = useState('');
     const [newCampaignType, setNewCampaignType] = useState<'POST' | 'WARMUP'>('POST');
     const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
+    const [showEditCampaignModal, setShowEditCampaignModal] = useState(false);
+    const [editCampaignForm, setEditCampaignForm] = useState({
+        id: '',
+        name: '',
+        description: '',
+        type: 'POST' as 'POST' | 'WARMUP',
+        groupId: '',
+        targetCommunities: '',
+        postsPerAccount: 3,
+        commentsPerPost: 5
+    });
     const [newGroupName, setNewGroupName] = useState('');
     const [caption, setCaption] = useState('');
     const [linkUrl, setLinkUrl] = useState('');
@@ -207,6 +226,8 @@ export default function Dashboard() {
     const [newAcc, setNewAcc] = useState({ 
         username: '', password: '', email: '', 
         proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', 
+        proxyProtocol: 'http' as 'http' | 'socks5',
+        proxyRotateIpUrl: '',
         type: 'MAIN', authToken: '', groupId: ''
     });
     const [twitterCookies, setTwitterCookies] = useState('');
@@ -330,6 +351,66 @@ export default function Dashboard() {
         } catch (err: any) {
             console.error('Create error', err);
             alert(`❌ Erreur lors de la création: ${err.response?.data?.error || err.message}`);
+        }
+    };
+
+    const openCampaignEditor = (c: any) => {
+        setEditCampaignForm({
+            id: c.id,
+            name: c.name || '',
+            description: c.description || '',
+            type: c.type === 'WARMUP' ? 'WARMUP' : 'POST',
+            groupId: c.groupId || '',
+            targetCommunities: Array.isArray(c.targetCommunities) ? c.targetCommunities.join('\n') : '',
+            postsPerAccount: c.postsPerAccount ?? 3,
+            commentsPerPost: c.commentsPerPost ?? 5
+        });
+        setShowEditCampaignModal(true);
+    };
+
+    const saveEditedCampaign = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editCampaignForm.name.trim()) {
+            alert('Nom de campagne requis');
+            return;
+        }
+        try {
+            const { data: updated } = await axios.patch(
+                `${API_BASE}/campaigns/${editCampaignForm.id}`,
+                {
+                    name: editCampaignForm.name,
+                    description: editCampaignForm.description,
+                    type: editCampaignForm.type,
+                    groupId: editCampaignForm.type === 'WARMUP' ? null : (editCampaignForm.groupId || null),
+                    targetCommunities: editCampaignForm.targetCommunities.split('\n').map((l) => l.trim()).filter(Boolean),
+                    postsPerAccount: editCampaignForm.postsPerAccount,
+                    commentsPerPost: editCampaignForm.commentsPerPost
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setShowEditCampaignModal(false);
+            fetchCampaigns();
+            if (selectedCampaign?.id === editCampaignForm.id) {
+                setSelectedCampaign((prev: any) => (prev ? { ...prev, ...updated, contents: prev.contents } : prev));
+            }
+            alert('Campagne mise à jour');
+        } catch (err: any) {
+            console.error(err);
+            alert(err.response?.data?.error || 'Erreur mise à jour campagne');
+        }
+    };
+
+    const deleteCampaign = async (c: any) => {
+        if (!confirm(`Supprimer la campagne « ${c.name} » et tout son contenu ?`)) return;
+        try {
+            await axios.delete(`${API_BASE}/campaigns/${c.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (selectedCampaign?.id === c.id) setSelectedCampaign(null);
+            fetchCampaigns();
+        } catch (err: any) {
+            console.error(err);
+            alert(err.response?.data?.error || 'Erreur suppression');
         }
     };
 
@@ -575,8 +656,10 @@ export default function Dashboard() {
                     proxy: newAcc.proxyHost ? { 
                         host: newAcc.proxyHost, 
                         port: parseInt(newAcc.proxyPort),
+                        protocol: newAcc.proxyProtocol,
                         username: newAcc.proxyUsername,
-                        password: newAcc.proxyPassword
+                        password: newAcc.proxyPassword,
+                        rotateIpUrl: newAcc.proxyRotateIpUrl?.trim() || null
                     } : undefined
                 })
             });
@@ -587,7 +670,7 @@ export default function Dashboard() {
             }
             
             setShowAddModal(false);
-            setNewAcc({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', type: 'MAIN', authToken: '', groupId: '' });
+            setNewAcc({ username: '', password: '', email: '', proxyHost: '', proxyPort: '', proxyUsername: '', proxyPassword: '', proxyProtocol: 'http', proxyRotateIpUrl: '', type: 'MAIN', authToken: '', groupId: '' });
             setTwitterCookies('');
             setTwitterCt0('');
             fetchAccounts(platform);
@@ -606,6 +689,8 @@ export default function Dashboard() {
             proxyPort: acc.proxy?.port?.toString() || '',
             proxyUsername: acc.proxy?.username || '',
             proxyPassword: acc.proxy?.password || '',
+            proxyProtocol: acc.proxy?.protocol === 'socks5' ? 'socks5' : 'http',
+            proxyRotateIpUrl: acc.proxy?.rotateIpUrl || '',
             type: acc.type || 'MAIN',
             authToken: '',
             groupId: acc.groupId || ''
@@ -673,8 +758,10 @@ export default function Dashboard() {
                     proxy: newAcc.proxyHost ? { 
                         host: newAcc.proxyHost, 
                         port: parseInt(newAcc.proxyPort),
+                        protocol: newAcc.proxyProtocol,
                         username: newAcc.proxyUsername,
-                        password: newAcc.proxyPassword
+                        password: newAcc.proxyPassword,
+                        rotateIpUrl: newAcc.proxyRotateIpUrl?.trim() || null
                     } : undefined
                 })
             });
@@ -1587,7 +1674,23 @@ export default function Dashboard() {
                                                     {c.isActive && <span className="px-2 py-1 bg-green-500/10 text-green-500 text-[10px] rounded-full border border-green-500/20">ACTIVE</span>}
                                                 </div>
                                             </div>
-                                            <div className="mt-4 pt-4 border-t border-white/10 flex justify-end">
+                                            <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+                                                <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openCampaignEditor(c)}
+                                                        className="px-3 py-2 bg-white/5 text-white/80 border border-white/15 hover:bg-white/10 rounded-lg text-xs font-bold flex items-center gap-1.5"
+                                                    >
+                                                        <Edit size={14} /> Modifier
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => deleteCampaign(c)}
+                                                        className="px-3 py-2 bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 rounded-lg text-xs font-bold flex items-center gap-1.5"
+                                                    >
+                                                        <Trash2 size={14} /> Supprimer
+                                                    </button>
+                                                </div>
                                                 {c.isActive ? (
                                                     <button 
                                                         onClick={async (e) => {
@@ -2118,15 +2221,51 @@ export default function Dashboard() {
                                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/50">
                                         <Server size={14} /> Network Configuration (Proxy)
                                     </div>
+                                    <p className="text-[11px] text-white/35 leading-relaxed">
+                                        HTTP (ex. port 8011) ou SOCKS5 (ex. port 5011). Tu peux coller <span className="font-mono text-white/50">host:port</span> dans le champ Host — il sera séparé automatiquement.
+                                    </p>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Type de proxy</label>
+                                        <select
+                                            value={newAcc.proxyProtocol}
+                                            onChange={(e) => setNewAcc({ ...newAcc, proxyProtocol: e.target.value as 'http' | 'socks5' })}
+                                            className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none px-4 py-3 rounded-xl text-sm text-white/90 appearance-none"
+                                        >
+                                            <option value="http">HTTP / HTTPS (Playwright: http://)</option>
+                                            <option value="socks5">SOCKS5 (Playwright: socks5://)</option>
+                                        </select>
+                                    </div>
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="col-span-2">
-                                            <Input label="Proxy Host" value={newAcc.proxyHost} onChange={(v: string) => setNewAcc({ ...newAcc, proxyHost: v })} placeholder="192.168.1.1" />
+                                            <Input
+                                                label="Proxy Host"
+                                                value={newAcc.proxyHost}
+                                                onChange={(v: string) => setNewAcc({ ...newAcc, proxyHost: v })}
+                                                onBlur={() => {
+                                                    setNewAcc((prev) => {
+                                                        const p = parseProxyHostPortInput(prev.proxyHost);
+                                                        return p ? { ...prev, proxyHost: p.host, proxyPort: p.port } : prev;
+                                                    });
+                                                }}
+                                                placeholder="chiproxy4.proxydns.tech ou host:port"
+                                            />
                                         </div>
-                                        <Input label="Port" value={newAcc.proxyPort} onChange={(v: string) => setNewAcc({ ...newAcc, proxyPort: v })} placeholder="8080" />
+                                        <Input label="Port" value={newAcc.proxyPort} onChange={(v: string) => setNewAcc({ ...newAcc, proxyPort: v })} placeholder="8011" />
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <Input label="Proxy Username (Optional)" value={newAcc.proxyUsername} onChange={(v: string) => setNewAcc({ ...newAcc, proxyUsername: v })} placeholder="user123" />
                                         <Input label="Proxy Password (Optional)" type="password" value={newAcc.proxyPassword} onChange={(v: string) => setNewAcc({ ...newAcc, proxyPassword: v })} placeholder="pass123" />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Rotation IP (GET, optionnel)</label>
+                                        <input
+                                            type="text"
+                                            value={newAcc.proxyRotateIpUrl}
+                                            onChange={(e) => setNewAcc({ ...newAcc, proxyRotateIpUrl: e.target.value })}
+                                            placeholder="https://rotateip.../change-ip?license=..."
+                                            className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none px-4 py-3 rounded-xl text-xs text-white/90 placeholder:text-white/25"
+                                        />
+                                        <p className="text-[10px] text-white/30">Appelée avant chaque session si un proxy est défini. Sinon, variable worker <span className="font-mono">PROXY_ROTATE_URL</span>.</p>
                                     </div>
                                 </div>
 
@@ -2294,15 +2433,50 @@ export default function Dashboard() {
                                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-white/50">
                                         <Server size={14} /> Network Configuration (Proxy)
                                     </div>
+                                    <p className="text-[11px] text-white/35 leading-relaxed">
+                                        HTTP ou SOCKS5. Colle <span className="font-mono text-white/50">host:port</span> dans Host pour séparer auto.
+                                    </p>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Type de proxy</label>
+                                        <select
+                                            value={newAcc.proxyProtocol}
+                                            onChange={(e) => setNewAcc({ ...newAcc, proxyProtocol: e.target.value as 'http' | 'socks5' })}
+                                            className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none px-4 py-3 rounded-xl text-sm text-white/90 appearance-none"
+                                        >
+                                            <option value="http">HTTP / HTTPS</option>
+                                            <option value="socks5">SOCKS5</option>
+                                        </select>
+                                    </div>
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="col-span-2">
-                                            <Input label="Proxy Host" value={newAcc.proxyHost} onChange={(v: string) => setNewAcc({ ...newAcc, proxyHost: v })} placeholder="192.168.1.1" />
+                                            <Input
+                                                label="Proxy Host"
+                                                value={newAcc.proxyHost}
+                                                onChange={(v: string) => setNewAcc({ ...newAcc, proxyHost: v })}
+                                                onBlur={() => {
+                                                    setNewAcc((prev) => {
+                                                        const p = parseProxyHostPortInput(prev.proxyHost);
+                                                        return p ? { ...prev, proxyHost: p.host, proxyPort: p.port } : prev;
+                                                    });
+                                                }}
+                                                placeholder="chiproxy4.proxydns.tech ou host:port"
+                                            />
                                         </div>
-                                        <Input label="Port" value={newAcc.proxyPort} onChange={(v: string) => setNewAcc({ ...newAcc, proxyPort: v })} placeholder="8080" />
+                                        <Input label="Port" value={newAcc.proxyPort} onChange={(v: string) => setNewAcc({ ...newAcc, proxyPort: v })} placeholder="8011" />
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <Input label="Proxy Username" value={newAcc.proxyUsername} onChange={(v: string) => setNewAcc({ ...newAcc, proxyUsername: v })} placeholder="user123" />
                                         <Input label="Proxy Password" type="password" value={newAcc.proxyPassword} onChange={(v: string) => setNewAcc({ ...newAcc, proxyPassword: v })} placeholder="pass123" />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Rotation IP (GET, optionnel)</label>
+                                        <input
+                                            type="text"
+                                            value={newAcc.proxyRotateIpUrl}
+                                            onChange={(e) => setNewAcc({ ...newAcc, proxyRotateIpUrl: e.target.value })}
+                                            placeholder="https://rotateip.../change-ip?license=..."
+                                            className="w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none px-4 py-3 rounded-xl text-xs text-white/90 placeholder:text-white/25"
+                                        />
                                     </div>
                                 </div>
 
@@ -2562,6 +2736,120 @@ export default function Dashboard() {
                                 >
                                     <Plus size={18} /> Créer la campagne
                                 </motion.button>
+                            </div>
+                        </motion.form>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showEditCampaignModal && (
+                    <motion.div
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0"
+                            onClick={() => setShowEditCampaignModal(false)}
+                        />
+                        <motion.form
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            onSubmit={saveEditedCampaign}
+                            className="w-full max-w-xl bg-[#0f0f11] border border-white/20 rounded-[40px] p-10 relative shadow-[0_0_80px_rgba(0,0,0,0.8)] z-10 max-h-[90vh] overflow-y-auto"
+                        >
+                            <button
+                                type="button"
+                                onClick={() => setShowEditCampaignModal(false)}
+                                className="absolute top-6 right-6 p-2 bg-white/5 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                            <h3 className="text-2xl font-semibold mb-2">Modifier la campagne</h3>
+                            <p className="text-sm text-white/40 mb-8">Nom, groupe, communautés et limites.</p>
+                            <div className="space-y-5">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Type</label>
+                                    <select
+                                        value={editCampaignForm.type}
+                                        onChange={(e) => setEditCampaignForm({ ...editCampaignForm, type: e.target.value as 'POST' | 'WARMUP' })}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white appearance-none"
+                                    >
+                                        <option value="POST">POST</option>
+                                        <option value="WARMUP">WARMUP</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Nom</label>
+                                    <input
+                                        value={editCampaignForm.name}
+                                        onChange={(e) => setEditCampaignForm({ ...editCampaignForm, name: e.target.value })}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Description</label>
+                                    <textarea
+                                        value={editCampaignForm.description}
+                                        onChange={(e) => setEditCampaignForm({ ...editCampaignForm, description: e.target.value })}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-sm text-white min-h-[72px]"
+                                    />
+                                </div>
+                                {editCampaignForm.type !== 'WARMUP' && (
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Groupe</label>
+                                        <select
+                                            value={editCampaignForm.groupId}
+                                            onChange={(e) => setEditCampaignForm({ ...editCampaignForm, groupId: e.target.value })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white appearance-none"
+                                        >
+                                            <option value="">Global (aucun)</option>
+                                            {groups.map((g) => (
+                                                <option key={g.id} value={g.id}>{g.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Communautés (une URL ou ID par ligne)</label>
+                                    <textarea
+                                        placeholder="https://x.com/i/communities/1868017631049265441"
+                                        value={editCampaignForm.targetCommunities}
+                                        onChange={(e) => setEditCampaignForm({ ...editCampaignForm, targetCommunities: e.target.value })}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-sm text-white h-28"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Posts / compte</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={editCampaignForm.postsPerAccount}
+                                            onChange={(e) => setEditCampaignForm({ ...editCampaignForm, postsPerAccount: parseInt(e.target.value, 10) || 1 })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] uppercase font-semibold tracking-widest text-white/40 ml-1">Commentaires / post</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={editCampaignForm.commentsPerPost}
+                                            onChange={(e) => setEditCampaignForm({ ...editCampaignForm, commentsPerPost: parseInt(e.target.value, 10) || 0 })}
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
+                                        />
+                                    </div>
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="w-full bg-amber-600 hover:bg-amber-500 text-white py-4 rounded-xl font-semibold mt-2 flex items-center justify-center gap-2"
+                                >
+                                    <Save size={18} /> Enregistrer
+                                </button>
                             </div>
                         </motion.form>
                     </motion.div>
@@ -3135,7 +3423,7 @@ function AccountCard({ account, active, onClick, onLaunch, onEditProfile, index,
     );
 }
 
-function Input({ label, value, onChange, type = "text", icon, placeholder }: { label: string, value: string, onChange: (v: string) => void, type?: string, icon?: any, placeholder?: string }) {
+function Input({ label, value, onChange, type = "text", icon, placeholder, onBlur }: { label: string, value: string, onChange: (v: string) => void, type?: string, icon?: any, placeholder?: string, onBlur?: () => void }) {
     return (
         <div className="space-y-1.5">
             <label className="text-xs uppercase font-bold tracking-[0.15em] text-white/60 ml-1">
@@ -3147,6 +3435,7 @@ function Input({ label, value, onChange, type = "text", icon, placeholder }: { l
                     type={type} 
                     value={value} 
                     onChange={(e) => onChange(e.target.value)}
+                    onBlur={onBlur}
                     className={`w-full bg-black/40 border border-white/10 focus:border-violet-500/50 outline-none ${icon ? 'pl-10' : 'pl-4'} pr-4 py-3 rounded-xl text-sm transition-all text-white/90 focus:bg-white/[0.02] placeholder:text-white/20`}
                     placeholder={placeholder || `name@exemple.com`}
                 />
