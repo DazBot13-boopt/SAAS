@@ -730,6 +730,52 @@ async function doManualLogin(
 // ─── Session Validation ───────────────────────────────────────────────────────
 
 /**
+ * Modal « [Nom] Rules » — étape obligatoire : « Agree and join » / « Accepter et rejoindre »
+ * Souvent affiché juste après le clic sur Join.
+ */
+async function dismissCommunityRulesModal(page: Page, emitLog: (msg: string) => void): Promise<void> {
+    try {
+        const agreePrimary = page
+            .locator(
+                [
+                    'button:has-text("Agree and join")',
+                    '[role="button"]:has-text("Agree and join")',
+                    'div[role="button"]:has-text("Agree and join")',
+                    'button:has-text("Accepter et rejoindre")',
+                    'button:has-text("Accept and join")',
+                    'button:has-text("I agree")',
+                    'button:has-text("J\'accepte")',
+                ].join(', ')
+            )
+            .first();
+
+        if (await agreePrimary.isVisible({ timeout: 2800 }).catch(() => false)) {
+            emitLog('💡 Modal des règles de la communauté — validation (Agree and join)…');
+            await humanClick(page, agreePrimary);
+            await sleep(randomRange(2000, 4000));
+            return;
+        }
+
+        const rulesDialog = page
+            .locator('[role="dialog"]')
+            .filter({ hasText: /Rules|Règles|Review and agree|accept.*rules|admins and are in addition/i });
+        if (await rulesDialog.first().isVisible({ timeout: 2200 }).catch(() => false)) {
+            const inner = rulesDialog
+                .locator('button, [role="button"]')
+                .filter({ hasText: /Agree and join|Accepter|Accept and join|I agree|J'accepte|Continuer/i })
+                .first();
+            if (await inner.isVisible({ timeout: 2800 }).catch(() => false)) {
+                emitLog('💡 Dialogue règles — clic sur le bouton d’acceptation…');
+                await humanClick(page, inner);
+                await sleep(randomRange(2000, 4000));
+            }
+        }
+    } catch {
+        // optionnel
+    }
+}
+
+/**
  * Modal d’onboarding X « Welcome to Communities » (bouton « Check it out », etc.)
  * Apparaît souvent juste après avoir rejoint une communauté.
  */
@@ -802,6 +848,7 @@ async function dismissPopups(page: Page, emitLog: (msg: string) => void): Promis
             await sleep(800);
         }
 
+        await dismissCommunityRulesModal(page, emitLog);
         await dismissCommunitiesWelcomeModal(page, emitLog);
     } catch (_) {
         // Popups optional — never block execution
@@ -2004,6 +2051,7 @@ async function doJoinCommunity(page: Page, emitLog: (msg: string) => void, confi
             emitLog("✅ Community join button clicked.");
             await sleep(randomRange(2500, 4000));
             for (let w = 0; w < 5; w++) {
+                await dismissCommunityRulesModal(page, emitLog);
                 await dismissCommunitiesWelcomeModal(page, emitLog);
                 await dismissPopups(page, emitLog);
                 await sleep(1200);
@@ -2011,6 +2059,7 @@ async function doJoinCommunity(page: Page, emitLog: (msg: string) => void, confi
         } else {
             emitLog("ℹ️ Join button not visible. Already a member?");
         }
+        await dismissCommunityRulesModal(page, emitLog);
         await dismissCommunitiesWelcomeModal(page, emitLog);
         return;
     }
@@ -2108,6 +2157,7 @@ async function ensureJoinCommunityIfNeeded(
             emitLog(`✅ Adhésion demandée / cliquée (${label.trim().slice(0, 48)})`);
             await sleep(randomRange(2800, 5000));
             for (let w = 0; w < 6; w++) {
+                await dismissCommunityRulesModal(page, emitLog);
                 await dismissCommunitiesWelcomeModal(page, emitLog);
                 await dismissPopups(page, emitLog);
                 await sleep(1200);
@@ -2116,6 +2166,7 @@ async function ensureJoinCommunityIfNeeded(
             emitLog('ℹ️ Aucun bouton Join visible — souvent déjà membre ou UI différente ; on tente le post.');
         }
         for (let w = 0; w < 3; w++) {
+            await dismissCommunityRulesModal(page, emitLog);
             await dismissCommunitiesWelcomeModal(page, emitLog);
             await sleep(800);
         }
