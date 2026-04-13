@@ -46,7 +46,9 @@ app.use(cors({
     (o, i, a) => o && a.indexOf(o) === i
   ),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  credentials: true
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 204,
 }));
 app.use(express.json());
 
@@ -1292,9 +1294,9 @@ app.post('/api/campaigns', authenticateToken, async (req: AuthRequest, res) => {
 });
 
 /**
- * Update campaign settings
+ * Update campaign settings (PATCH et PUT — PUT évite les vieux caches CORS sans PATCH)
  */
-app.patch('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res) => {
+const handleUpdateCampaign = async (req: AuthRequest, res: express.Response) => {
     const { id } = req.params;
     const userId = req.user?.id || 'temp-user-id';
     const { name, description, type, postsPerAccount, commentsPerPost, totalCommentsQuota, targetCommunities, isActive } = req.body;
@@ -1322,12 +1324,14 @@ app.patch('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res)
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }
-});
+};
+app.patch('/api/campaigns/:id', authenticateToken, handleUpdateCampaign);
+app.put('/api/campaigns/:id', authenticateToken, handleUpdateCampaign);
 
 /**
- * Delete a campaign and its content pool
+ * Delete a campaign and its content pool (DELETE + POST /delete pour CORS / proxies stricts)
  */
-app.delete('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res) => {
+const handleDeleteCampaign = async (req: AuthRequest, res: express.Response) => {
     const { id } = req.params;
     const userId = req.user?.id || 'temp-user-id';
     try {
@@ -1342,7 +1346,9 @@ app.delete('/api/campaigns/:id', authenticateToken, async (req: AuthRequest, res
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }
-});
+};
+app.delete('/api/campaigns/:id', authenticateToken, handleDeleteCampaign);
+app.post('/api/campaigns/:id/delete', authenticateToken, handleDeleteCampaign);
 
 /**
  * Toggle Campaign and update interval settings
