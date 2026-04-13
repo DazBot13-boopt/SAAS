@@ -22,6 +22,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'ghost-content-secret-key-2024';
 const app = express();
 const prisma = new PrismaClient();
 const port = process.env.PORT || 4000;
+const backendPublicUrl = (process.env.BACKEND_PUBLIC_URL || '').replace(/\/$/, '');
 
 // Redis Connection for Queue
 const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
@@ -40,6 +41,23 @@ const io = new Server(httpServer, {
 });
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+const linkCastStorePath = path.join(__dirname, '..', 'data', 'link-casts.json');
+
+function readLinkCastStore(): Record<string, { imageUrl: string; targetUrl: string; createdAt: string }> {
+    try {
+        if (!fs.existsSync(linkCastStorePath)) return {};
+        const raw = fs.readFileSync(linkCastStorePath, 'utf-8');
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeLinkCastStore(store: Record<string, { imageUrl: string; targetUrl: string; createdAt: string }>) {
+    const dir = path.dirname(linkCastStorePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(linkCastStorePath, JSON.stringify(store, null, 2), 'utf-8');
+}
 
 app.use(cors({
   origin: [frontendUrl, 'http://localhost:3000'],
@@ -588,7 +606,33 @@ app.post('/api/twitter-accounts/:id/action', authenticateToken, async (req: Auth
     console.log(`[Backend] Received action request for Twitter account ${id}: ${action}`);
 
     try {
-        const job = await twitterQueue.add(action, { accountId: id, action });
+        const account = await prisma.twitterAccount.findUnique({ where: { id } });
+        if (!account) return res.status(404).json({ error: 'Compte introuvable' });
+
+        let config = req.body.config || {};
+        if ((action === 'joinCommunity' || action === 'postCommunity') && !config.url && !config.communityUrl) {
+            const activeCampaign = await prisma.campaign.findFirst({
+                where: {
+                    userId: account.userId,
+                    isActive: true,
+                    OR: [
+                        ...(account.groupId ? [{ groupId: account.groupId }] : []),
+                        { groupId: null }
+                    ]
+                },
+                include: { contents: true },
+                orderBy: { updatedAt: 'desc' }
+            });
+
+            const campaignCommunity = activeCampaign?.targetCommunities?.[0];
+            const contentCommunity = activeCampaign?.contents?.find((c) => !!c.targetCommunity)?.targetCommunity;
+            const selectedCommunity = req.body.communityUrl || contentCommunity || campaignCommunity;
+            if (selectedCommunity) {
+                config = { ...config, url: selectedCommunity, communityUrl: selectedCommunity };
+            }
+        }
+
+        const job = await twitterQueue.add(action, { accountId: id, action, config, username: account.username });
         console.log(`[Backend] Job added to Twitter queue: ${job.id}`);
         res.json({ jobId: job.id, message: `Action ${action} queued successfully on Twitter worker.` });
     } catch (error: any) {
@@ -1102,8 +1146,10 @@ app.post('/api/upload', upload.single('image'), async (req: any, res) => {
             return res.status(400).json({ error: 'Aucun fichier uploadé' });
         }
 
-        // Generate URL for the uploaded file
-        const fileUrl = `http://localhost:${port}/uploads/${req.file.filename}`;
+        // Generate URL for the uploaded file (public URL for social crawlers like Twitter)
+        const fileUrl = backendPublicUrl
+            ? `${backendPublicUrl}/uploads/${req.file.filename}`
+            : `http://localhost:${port}/uploads/${req.file.filename}`;
 
         res.json({
             success: true,
@@ -1116,6 +1162,38 @@ app.post('/api/upload', upload.single('image'), async (req: any, res) => {
     } catch (error: any) {
         console.error('Upload error:', error);
         res.status(500).json({ error: 'Erreur lors de l\'upload: ' + error.message });
+    }
+});
+
+// --- LINK CAST API ---
+app.post('/api/link-cast', authenticateToken, async (req: AuthRequest, res) => {
+    const { imageUrl, targetUrl } = req.body;
+    if (!imageUrl || !targetUrl) return res.status(400).json({ error: 'imageUrl et targetUrl sont requis' });
+
+    try {
+        const slug = Math.random().toString(36).slice(2, 10);
+        const store = readLinkCastStore();
+        store[slug] = {
+            imageUrl,
+            targetUrl,
+            createdAt: new Date().toISOString()
+        };
+        writeLinkCastStore(store);
+        res.status(201).json({ slug, imageUrl, targetUrl });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/link-cast/:slug', async (req, res) => {
+    try {
+        const { slug } = req.params;
+        const store = readLinkCastStore();
+        const linkCast = store[slug];
+        if (!linkCast) return res.status(404).json({ error: 'Slug introuvable' });
+        res.json({ slug, ...linkCast });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
     }
 });
 

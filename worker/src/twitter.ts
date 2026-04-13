@@ -1464,9 +1464,15 @@ async function doAutoPost(page: Page, emitLog: (msg: string) => void, config: an
         if (!composed) {
             for (let attempt = 1; attempt <= 3; attempt++) {
                 try {
-                    const composeUrl = config?.communityUrl 
-                        ? `${config.communityUrl.replace(/\/$/, '')}/compose` 
-                        : 'https://x.com/compose/post';
+                    let composeUrl = 'https://x.com/compose/post';
+                    if (config?.communityUrl) {
+                        const communityMatch = String(config.communityUrl).match(/communities\/(\d+)/);
+                        if (communityMatch?.[1]) {
+                            composeUrl = `https://x.com/compose/post?community_id=${communityMatch[1]}`;
+                        } else {
+                            composeUrl = config.communityUrl;
+                        }
+                    }
                     
                     if (attempt === 1) emitLog(`🌐 Navigation vers la page de composition...`);
                     else emitLog(`🔄 Tentative ${attempt}/3 pour la page compose...`);

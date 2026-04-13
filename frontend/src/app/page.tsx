@@ -57,7 +57,8 @@ import {
     MessageSquare,
     Link as LinkIcon,
     Image as ImageIcon,
-    Loader2
+    Loader2,
+    Wrench
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NewFeatures from '../components/NewFeatures';
@@ -943,7 +944,7 @@ export default function Dashboard() {
                     
                     <div className="w-8 h-[1px] bg-white/10 my-2" />
 
-                    <SidebarIcon icon={<FolderTree size={22} />} active={showNewFeatures} onClick={() => setShowNewFeatures(true)} title="🌟 Fonctionnalités Avancées - Groupes, Templates, Stats" />
+                    <SidebarIcon icon={<Wrench size={22} />} active={showNewFeatures} onClick={() => setShowNewFeatures(true)} title="🛠️ Outils Avancés" />
 
                     <div className="w-8 h-1 bg-gradient-to-r from-violet-500 to-purple-500 my-2 rounded-full" />
 
@@ -1026,8 +1027,8 @@ export default function Dashboard() {
                                     onClick={() => setShowNewFeatures(true)}
                                     className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-lg shadow-blue-600/20"
                                 >
-                                    <FolderTree size={16} />
-                                    Fonctionnalités Avancées
+                                    <Wrench size={16} />
+                                    Outils Avancés
                                 </button>
                             </div>
 
@@ -1048,7 +1049,7 @@ export default function Dashboard() {
                                                     bannerImage: acc.bannerImage || '',
                                                     niche: acc.niche || ''
                                                 });
-                                                setShowProfileModal(true);
+                                                setShowNewFeatures(true);
                                             }}
                                             index={idx}
                                             platform={platform}
