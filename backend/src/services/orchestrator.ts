@@ -129,14 +129,6 @@ async function handleMainAutomation(account: any, campaign: any) {
                 config: { url: communityUrl }
             });
         }
-        // Warm up fallback
-        else if (roll < 0.20) {
-            await twitterQueue.add(`auto-warmup-${account.username}-${Date.now()}`, {
-                accountId: account.id,
-                action: 'warmUp',
-                username: account.username
-            });
-        }
     } catch (error) {
         console.error(`❌ Error in handleMainAutomation for ${account.username}:`, error);
     }
