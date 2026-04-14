@@ -252,7 +252,10 @@ async function triggerCampaignPost(account: any, campaign: any) {
         // Always prefer posting to community when one is available
         let targetCommunity = content.targetCommunity;
         if (!targetCommunity && campaign.targetCommunities && campaign.targetCommunities.length > 0) {
-            targetCommunity = campaign.targetCommunities[Math.floor(Math.random() * campaign.targetCommunities.length)];
+            const validCommunities = campaign.targetCommunities.filter((c: string) => c && c.trim().length > 0);
+            if (validCommunities.length > 0) {
+                targetCommunity = validCommunities[Math.floor(Math.random() * validCommunities.length)];
+            }
         }
 
         console.log(`🚀 Orchestrator: Triggering Post for ${account.username} (Campaign: ${campaign.name}${targetCommunity ? ' in community ' + targetCommunity : ''})`);
