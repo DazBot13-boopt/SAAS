@@ -2279,7 +2279,7 @@ async function doCommunityPost(page: Page, emitLog: (msg: string) => void, confi
         }
 
         const joinBtnSelectors = [
-            'button:has-text("Join")',
+            'button:has-text("Join"):not(:has-text("Joined")):not(:has-text("Joined"))',
             'button:has-text("Rejoindre")',
             'button:has-text("Request to join")',
             'button:has-text("Demander")'
