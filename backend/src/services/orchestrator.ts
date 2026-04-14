@@ -250,7 +250,7 @@ async function triggerCampaignPost(account: any, campaign: any) {
         const content = campaignWithContent.contents[Math.floor(Math.random() * campaignWithContent.contents.length)];
         
         // Always prefer posting to community when one is available
-        let targetCommunity = content.targetCommunity;
+        let targetCommunity = content.targetCommunity?.trim();
         if (!targetCommunity && campaign.targetCommunities && campaign.targetCommunities.length > 0) {
             const validCommunities = campaign.targetCommunities.filter((c: string) => c && c.trim().length > 0);
             if (validCommunities.length > 0) {
