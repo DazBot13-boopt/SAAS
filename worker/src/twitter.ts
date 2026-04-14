@@ -2139,7 +2139,14 @@ async function doJoinCommunity(page: Page, emitLog: (msg: string) => void, confi
         await dismissCommunityLoadOverlays(page, emitLog);
 
         // Look for Join button
-        const joinBtn = page.locator('button:has-text("Join"), button:has-text("Rejoindre")').first();
+        const joinBtn = page.locator([
+            'button:has-text("Join")',
+            'button:has-text("Rejoindre")',
+            'button:has-text("Request to join")',
+            'button:has-text("Demander")',
+            'a:has-text("Join")',
+            'a:has-text("Rejoindre")'
+        ].join(', ')).first();
         if (await joinBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
             await humanClick(page, joinBtn);
             emitLog("✅ Community join button clicked.");
