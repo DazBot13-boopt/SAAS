@@ -64,7 +64,7 @@ export const executeGlobalCycle = async () => {
             // Passive support automation only for POST campaigns
             const supportAccounts = await prisma.twitterAccount.findMany({
                 where: {
-                    ...(campaign.groupId ? { groupId: campaign.groupId } : { userId: campaign.userId }),
+                    userId: campaign.userId,
                     type: 'SUPPORT',
                     autoMode: true
                 }
@@ -127,11 +127,11 @@ async function handleMainAutomation(account: any, campaign: any) {
 
 async function handleSupportAutomation(account: any) {
     try {
-        // Find the most recent post from any MAIN account in the same group
+        // Find the most recent post from any MAIN account owned by this user
         const latestMainPost = await prisma.twitterPost.findFirst({
             where: {
                 account: {
-                    groupId: account.groupId,
+                    userId: account.userId,
                     type: 'MAIN'
                 },
                 status: 'PUBLISHED',
