@@ -639,6 +639,32 @@ app.post('/api/twitter-accounts/:id/action', authenticateToken, async (req: Auth
             }
         }
 
+        // Support accounts commenting → target the MAIN account's most recent post (same group),
+        // not a random keyword search. User requested: comment only on MAIN posts, prefer latest.
+        if ((action === 'spamComments' || action === 'autoComment') && account.type === 'SUPPORT' && !config.url) {
+            const latestMainPost = await prisma.twitterPost.findFirst({
+                where: {
+                    status: 'PUBLISHED',
+                    NOT: { postUrl: null },
+                    account: {
+                        userId: account.userId,
+                        type: 'MAIN',
+                        ...(account.groupId ? { groupId: account.groupId } : {}),
+                    },
+                },
+                orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+            });
+
+            if (!latestMainPost?.postUrl) {
+                return res.status(400).json({
+                    error: "Aucun post récent trouvé sur le compte principal de ce groupe. Poste d'abord avec le compte MAIN avant de lancer les commentaires des supports.",
+                });
+            }
+
+            config = { ...config, url: latestMainPost.postUrl };
+            console.log(`[Backend] Support ${account.username} targeting MAIN post ${latestMainPost.postUrl}`);
+        }
+
         const job = await twitterQueue.add(action, { accountId: id, action, config, username: account.username });
         console.log(`[Backend] Job added to Twitter queue: ${job.id}`);
         res.json({ jobId: job.id, message: `Action ${action} queued successfully on Twitter worker.` });
