@@ -1687,43 +1687,43 @@ io.on('connection', (socket) => {
                 });
 
                 if (supportAccounts.length > 0) {
-                    console.log(`🚀 Scheduling engagement for ${supportAccounts.length} support accounts...`);
-                    
+                    console.log(`🚀 Orchestration: kicking off ${supportAccounts.length} support accounts IMMEDIATELY on ${data.postUrl}`);
+
+                    const SUPPORT_COMMENTS_PER_POST = 10;
+
                     for (let i = 0; i < supportAccounts.length; i++) {
                         const support = supportAccounts[i];
-                        // Stagger engagement: 1-3 minutes random delay per account
-                        const delay = (1 + Math.random() * 2) * 60 * 1000;
-                        
-                        // Queue Auto-Like
+                        // Tiny per-account jitter (0-8s) so we don't launch N Playwright browsers in the exact same millisecond,
+                        // but still "immediate" from the user's point of view.
+                        const jitterMs = Math.floor(Math.random() * 8000);
+
+                        // Queue Auto-Like (fire-and-forget, also immediate)
                         await twitterQueue.add(
                             `orchestration-like-${support.username}-${Date.now()}`,
                             {
                                 accountId: support.id,
                                 action: 'autoLike',
-                                config: { 
+                                config: {
                                     url: data.postUrl,
-                                    count: 1 
+                                    count: 1
                                 }
                             },
-                            { delay: Math.floor(delay), attempts: 2 }
+                            { delay: jitterMs, attempts: 2 }
                         );
 
-                        // Queue Auto-Comment (Guarantee 100% engagement)
-                        if (true) {
-                            await twitterQueue.add(
-                                `orchestration-comment-${support.username}-${Date.now()}`,
-                                {
-                                    accountId: support.id,
-                                    action: 'autoComment',
-                                    config: {
-                                        url: data.postUrl,
-                                        comments: [ "Great content! Keep it up 🔥" ], 
-                                        count: 1
-                                    }
-                                },
-                                { delay: Math.floor(delay + (2 * 60 * 1000)), attempts: 2 } // 2 min after like
-                            );
-                        }
+                        // Queue Auto-Comment — 10 comments on the MAIN's post, immediately
+                        await twitterQueue.add(
+                            `orchestration-comment-${support.username}-${Date.now()}`,
+                            {
+                                accountId: support.id,
+                                action: 'autoComment',
+                                config: {
+                                    url: data.postUrl,
+                                    count: SUPPORT_COMMENTS_PER_POST
+                                }
+                            },
+                            { delay: jitterMs, attempts: 2 }
+                        );
                     }
                 }
             }
