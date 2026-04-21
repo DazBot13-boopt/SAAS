@@ -1245,7 +1245,19 @@ async function doAutoComment(page: Page, emitLog: (msg: string) => void, config:
         emitLog(`🎯 Directed engagement on: ${config.url} with ${count} comments`);
         await page.goto(config.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await sleep(randomRange(3000, 5000));
-        
+
+        // Like the post first (same browser session as the comments, avoids 2 concurrent sessions per account)
+        try {
+            const likeBtn = page.locator('[data-testid="like"]').first();
+            if (await likeBtn.count() > 0 && await likeBtn.isVisible({ timeout: 3000 })) {
+                await humanClick(page, likeBtn);
+                emitLog(`❤️ Post liké.`);
+                await sleep(randomRange(1500, 3000));
+            }
+        } catch (err: any) {
+            emitLog(`⚠️ Like ignoré: ${err?.message || err}`);
+        }
+
         for (let i = 0; i < count; i++) {
             await dismissPopups(page, emitLog);
             const replyBtn = page.locator('[data-testid="reply"]').first();

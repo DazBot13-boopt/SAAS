@@ -1697,21 +1697,9 @@ io.on('connection', (socket) => {
                         // but still "immediate" from the user's point of view.
                         const jitterMs = Math.floor(Math.random() * 8000);
 
-                        // Queue Auto-Like (fire-and-forget, also immediate)
-                        await twitterQueue.add(
-                            `orchestration-like-${support.username}-${Date.now()}`,
-                            {
-                                accountId: support.id,
-                                action: 'autoLike',
-                                config: {
-                                    url: data.postUrl,
-                                    count: 1
-                                }
-                            },
-                            { delay: jitterMs, attempts: 2 }
-                        );
-
-                        // Queue Auto-Comment — 10 comments on the MAIN's post, immediately
+                        // ONE job per support account: directed autoComment now also likes the post
+                        // in the same browser session (avoids two concurrent Playwright sessions fighting
+                        // over the account's cookies in the DB).
                         await twitterQueue.add(
                             `orchestration-comment-${support.username}-${Date.now()}`,
                             {
