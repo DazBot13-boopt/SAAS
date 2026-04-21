@@ -2174,7 +2174,7 @@ export default function Dashboard() {
                                                             </label>
                                                             <textarea
                                                                 value={twitterCookies}
-                                                                onChange={(e) => setTwitterCookies(e.target.value)}
+                                                                onChange={(e) => setTwitterCookies(e.target.value.replace(/\s+/g, ''))}
                                                                 placeholder="8bbfbb5f4b0fe3ab..."
                                                                 rows={2}
                                                                 autoComplete="off"
@@ -2191,7 +2191,7 @@ export default function Dashboard() {
                                                             </label>
                                                             <textarea
                                                                 value={twitterCt0}
-                                                                onChange={(e) => setTwitterCt0(e.target.value)}
+                                                                onChange={(e) => setTwitterCt0(e.target.value.replace(/\s+/g, ''))}
                                                                 placeholder="c54f5c857297f53e..."
                                                                 rows={3}
                                                                 autoComplete="off"
@@ -2402,7 +2402,7 @@ export default function Dashboard() {
                                                             </label>
                                                             <textarea
                                                                 value={twitterCookies}
-                                                                onChange={(e) => setTwitterCookies(e.target.value)}
+                                                                onChange={(e) => setTwitterCookies(e.target.value.replace(/\s+/g, ''))}
                                                                 placeholder="8bbfbb5f4b0fe3ab..."
                                                                 rows={2}
                                                                 autoComplete="off"
@@ -2419,7 +2419,7 @@ export default function Dashboard() {
                                                             </label>
                                                             <textarea
                                                                 value={twitterCt0}
-                                                                onChange={(e) => setTwitterCt0(e.target.value)}
+                                                                onChange={(e) => setTwitterCt0(e.target.value.replace(/\s+/g, ''))}
                                                                 placeholder="c54f5c857297f53e..."
                                                                 rows={3}
                                                                 autoComplete="off"

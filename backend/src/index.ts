@@ -602,24 +602,40 @@ app.post('/api/twitter-accounts/:id/action', authenticateToken, async (req: Auth
 
         let config = req.body.config || {};
         if ((action === 'joinCommunity' || action === 'postCommunity') && !config.url && !config.communityUrl) {
-            const activeCampaign = await prisma.campaign.findFirst({
+            // Try active campaign matching this account's group first, then any campaign, then any content
+            const campaigns = await prisma.campaign.findMany({
                 where: {
                     userId: account.userId,
-                    isActive: true,
                     OR: [
                         ...(account.groupId ? [{ groupId: account.groupId }] : []),
                         { groupId: null }
                     ]
                 },
                 include: { contents: true },
-                orderBy: { updatedAt: 'desc' }
+                orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }]
             });
 
-            const campaignCommunity = activeCampaign?.targetCommunities?.[0];
-            const contentCommunity = activeCampaign?.contents?.find((c) => !!c.targetCommunity)?.targetCommunity;
-            const selectedCommunity = req.body.communityUrl || contentCommunity || campaignCommunity;
+            let selectedCommunity: string | undefined = req.body.communityUrl;
+            for (const c of campaigns) {
+                if (selectedCommunity) break;
+                const contentCommunity = c.contents?.find((ct) => !!ct.targetCommunity)?.targetCommunity;
+                selectedCommunity = contentCommunity || c.targetCommunities?.[0] || undefined;
+            }
+
+            if (!selectedCommunity) {
+                // Last resort: any caption in the user's library with a targetCommunity
+                const anyContent = await prisma.campaignContent.findFirst({
+                    where: { campaign: { userId: account.userId }, NOT: { targetCommunity: null } }
+                });
+                selectedCommunity = anyContent?.targetCommunity || undefined;
+            }
+
             if (selectedCommunity) {
                 config = { ...config, url: selectedCommunity, communityUrl: selectedCommunity };
+            } else if (action === 'postCommunity') {
+                return res.status(400).json({
+                    error: "Aucune communauté cible configurée. Ajoutez un 'targetCommunity' dans une campagne ou un caption avant de lancer Post Captions."
+                });
             }
         }
 

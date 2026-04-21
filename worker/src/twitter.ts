@@ -2071,14 +2071,17 @@ async function doSetupProfile(page: Page, emitLog: (msg: string) => void, config
     emitLog("⚙️ Mise à jour du profil...");
     await page.goto('https://x.com/settings/profile', { waitUntil: 'domcontentloaded' });
     await sleep(randomRange(4000, 7000));
-    await humanScroll(page);
 
     const bioInput = 'textarea[data-testid="ProfileDescription_Input"]';
     try {
-        await page.waitForSelector(bioInput, { state: 'visible', timeout: 15000 });
+        await page.waitForSelector(bioInput, { state: 'visible', timeout: 20000 });
+        await humanScroll(page);
+        await page.waitForSelector(bioInput, { state: 'visible', timeout: 5000 });
+
         const bio = config?.bio || AUTO_BIOS[randomRange(0, AUTO_BIOS.length - 1)];
         emitLog(`✍️ Bio: "${bio}"`);
 
+        await page.locator(bioInput).scrollIntoViewIfNeeded().catch(() => {});
         await page.locator(bioInput).fill('');
         await sleep(500);
         await humanType(page, bioInput, bio);
@@ -2088,9 +2091,11 @@ async function doSetupProfile(page: Page, emitLog: (msg: string) => void, config
         if (await saveBtn.count() > 0) {
             await humanClick(page, saveBtn);
             emitLog("✅ Profil mis à jour !");
+        } else {
+            emitLog("⚠️ Bouton Enregistrer introuvable.");
         }
-    } catch {
-        emitLog("❌ Erreur lors de la mise à jour du profil.");
+    } catch (err: any) {
+        emitLog(`❌ Erreur lors de la mise à jour du profil: ${err?.message || err}`);
     }
     await sleep(3000);
 }
@@ -2632,6 +2637,7 @@ export const twitterWorkerHandler = async (job: any) => {
                 await doAutoLike(page, emitLog, config);
                 break;
             case 'autoFollow':
+            case 'follow':
                 await doAutoFollow(page, emitLog, config);
                 break;
             case 'autoRetweet':
