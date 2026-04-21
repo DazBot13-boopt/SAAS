@@ -2172,24 +2172,34 @@ export default function Dashboard() {
                                                             <label className="text-[11px] font-medium text-blue-300 mb-1 block">
                                                                 auth_token <span className="text-red-400">*</span>
                                                             </label>
-                                                            <input 
-                                                                type="text"
+                                                            <textarea
                                                                 value={twitterCookies}
                                                                 onChange={(e) => setTwitterCookies(e.target.value)}
                                                                 placeholder="8bbfbb5f4b0fe3ab..."
-                                                                className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-sm text-white/90 focus:bg-white/[0.02] transition-all"
+                                                                rows={2}
+                                                                autoComplete="off"
+                                                                autoCorrect="off"
+                                                                autoCapitalize="off"
+                                                                spellCheck={false}
+                                                                style={{ wordBreak: 'break-all' }}
+                                                                className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-xs font-mono text-white/90 focus:bg-white/[0.02] transition-all resize-y break-all"
                                                             />
                                                         </div>
                                                         <div>
                                                             <label className="text-[11px] font-medium text-blue-300 mb-1 block">
                                                                 ct0 (Requis pour poster) <span className="text-red-400">*</span>
                                                             </label>
-                                                            <input 
-                                                                type="text"
+                                                            <textarea
                                                                 value={twitterCt0}
                                                                 onChange={(e) => setTwitterCt0(e.target.value)}
                                                                 placeholder="c54f5c857297f53e..."
-                                                                className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-sm text-white/90 focus:bg-white/[0.02] transition-all"
+                                                                rows={3}
+                                                                autoComplete="off"
+                                                                autoCorrect="off"
+                                                                autoCapitalize="off"
+                                                                spellCheck={false}
+                                                                style={{ wordBreak: 'break-all' }}
+                                                                className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-xs font-mono text-white/90 focus:bg-white/[0.02] transition-all resize-y break-all"
                                                             />
                                                         </div>
                                                     </div>
@@ -2390,24 +2400,34 @@ export default function Dashboard() {
                                                             <label className="text-[11px] font-medium text-blue-300 mb-1 block">
                                                                 auth_token <span className="text-red-400">*</span>
                                                             </label>
-                                                            <input 
-                                                                type="text"
+                                                            <textarea
                                                                 value={twitterCookies}
                                                                 onChange={(e) => setTwitterCookies(e.target.value)}
                                                                 placeholder="8bbfbb5f4b0fe3ab..."
-                                                                className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-sm text-white/90 focus:bg-white/[0.02] transition-all"
+                                                                rows={2}
+                                                                autoComplete="off"
+                                                                autoCorrect="off"
+                                                                autoCapitalize="off"
+                                                                spellCheck={false}
+                                                                style={{ wordBreak: 'break-all' }}
+                                                                className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-xs font-mono text-white/90 focus:bg-white/[0.02] transition-all resize-y break-all"
                                                             />
                                                         </div>
                                                         <div>
                                                             <label className="text-[11px] font-medium text-blue-300 mb-1 block">
                                                                 ct0 (Requis pour poster) <span className="text-red-400">*</span>
                                                             </label>
-                                                            <input 
-                                                                type="text"
+                                                            <textarea
                                                                 value={twitterCt0}
                                                                 onChange={(e) => setTwitterCt0(e.target.value)}
                                                                 placeholder="c54f5c857297f53e..."
-                                                                className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-sm text-white/90 focus:bg-white/[0.02] transition-all"
+                                                                rows={3}
+                                                                autoComplete="off"
+                                                                autoCorrect="off"
+                                                                autoCapitalize="off"
+                                                                spellCheck={false}
+                                                                style={{ wordBreak: 'break-all' }}
+                                                                className="w-full bg-black/40 border border-white/10 focus:border-blue-500/50 outline-none px-4 py-3 rounded-xl text-xs font-mono text-white/90 focus:bg-white/[0.02] transition-all resize-y break-all"
                                                             />
                                                         </div>
                                                     </div>
