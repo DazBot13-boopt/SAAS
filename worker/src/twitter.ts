@@ -1245,7 +1245,19 @@ async function doAutoComment(page: Page, emitLog: (msg: string) => void, config:
         emitLog(`🎯 Directed engagement on: ${config.url} with ${count} comments`);
         await page.goto(config.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await sleep(randomRange(3000, 5000));
-        
+
+        // Like the post first (same browser session as the comments, avoids 2 concurrent sessions per account)
+        try {
+            const likeBtn = page.locator('[data-testid="like"]').first();
+            if (await likeBtn.count() > 0 && await likeBtn.isVisible({ timeout: 3000 })) {
+                await humanClick(page, likeBtn);
+                emitLog(`❤️ Post liké.`);
+                await sleep(randomRange(1500, 3000));
+            }
+        } catch (err: any) {
+            emitLog(`⚠️ Like ignoré: ${err?.message || err}`);
+        }
+
         for (let i = 0; i < count; i++) {
             await dismissPopups(page, emitLog);
             const replyBtn = page.locator('[data-testid="reply"]').first();
@@ -2071,14 +2083,17 @@ async function doSetupProfile(page: Page, emitLog: (msg: string) => void, config
     emitLog("⚙️ Mise à jour du profil...");
     await page.goto('https://x.com/settings/profile', { waitUntil: 'domcontentloaded' });
     await sleep(randomRange(4000, 7000));
-    await humanScroll(page);
 
     const bioInput = 'textarea[data-testid="ProfileDescription_Input"]';
     try {
-        await page.waitForSelector(bioInput, { state: 'visible', timeout: 15000 });
+        await page.waitForSelector(bioInput, { state: 'visible', timeout: 20000 });
+        await humanScroll(page);
+        await page.waitForSelector(bioInput, { state: 'visible', timeout: 5000 });
+
         const bio = config?.bio || AUTO_BIOS[randomRange(0, AUTO_BIOS.length - 1)];
         emitLog(`✍️ Bio: "${bio}"`);
 
+        await page.locator(bioInput).scrollIntoViewIfNeeded().catch(() => {});
         await page.locator(bioInput).fill('');
         await sleep(500);
         await humanType(page, bioInput, bio);
@@ -2088,9 +2103,11 @@ async function doSetupProfile(page: Page, emitLog: (msg: string) => void, config
         if (await saveBtn.count() > 0) {
             await humanClick(page, saveBtn);
             emitLog("✅ Profil mis à jour !");
+        } else {
+            emitLog("⚠️ Bouton Enregistrer introuvable.");
         }
-    } catch {
-        emitLog("❌ Erreur lors de la mise à jour du profil.");
+    } catch (err: any) {
+        emitLog(`❌ Erreur lors de la mise à jour du profil: ${err?.message || err}`);
     }
     await sleep(3000);
 }
@@ -2632,6 +2649,7 @@ export const twitterWorkerHandler = async (job: any) => {
                 await doAutoLike(page, emitLog, config);
                 break;
             case 'autoFollow':
+            case 'follow':
                 await doAutoFollow(page, emitLog, config);
                 break;
             case 'autoRetweet':

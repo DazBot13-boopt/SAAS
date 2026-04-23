@@ -602,25 +602,67 @@ app.post('/api/twitter-accounts/:id/action', authenticateToken, async (req: Auth
 
         let config = req.body.config || {};
         if ((action === 'joinCommunity' || action === 'postCommunity') && !config.url && !config.communityUrl) {
-            const activeCampaign = await prisma.campaign.findFirst({
+            // Try active campaign matching this account's group first, then any campaign, then any content
+            const campaigns = await prisma.campaign.findMany({
                 where: {
                     userId: account.userId,
-                    isActive: true,
                     OR: [
                         ...(account.groupId ? [{ groupId: account.groupId }] : []),
                         { groupId: null }
                     ]
                 },
                 include: { contents: true },
-                orderBy: { updatedAt: 'desc' }
+                orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }]
             });
 
-            const campaignCommunity = activeCampaign?.targetCommunities?.[0];
-            const contentCommunity = activeCampaign?.contents?.find((c) => !!c.targetCommunity)?.targetCommunity;
-            const selectedCommunity = req.body.communityUrl || contentCommunity || campaignCommunity;
+            let selectedCommunity: string | undefined = req.body.communityUrl;
+            for (const c of campaigns) {
+                if (selectedCommunity) break;
+                const contentCommunity = c.contents?.find((ct) => !!ct.targetCommunity)?.targetCommunity;
+                selectedCommunity = contentCommunity || c.targetCommunities?.[0] || undefined;
+            }
+
+            if (!selectedCommunity) {
+                // Last resort: any caption in the user's library with a targetCommunity
+                const anyContent = await prisma.campaignContent.findFirst({
+                    where: { campaign: { userId: account.userId }, NOT: { targetCommunity: null } }
+                });
+                selectedCommunity = anyContent?.targetCommunity || undefined;
+            }
+
             if (selectedCommunity) {
                 config = { ...config, url: selectedCommunity, communityUrl: selectedCommunity };
+            } else if (action === 'postCommunity') {
+                return res.status(400).json({
+                    error: "Aucune communauté cible configurée. Ajoutez un 'targetCommunity' dans une campagne ou un caption avant de lancer Post Captions."
+                });
             }
+        }
+
+        // Support accounts commenting → target the MAIN account's most recent post (same group),
+        // not a random keyword search. User requested: comment only on MAIN posts, prefer latest.
+        if ((action === 'spamComments' || action === 'autoComment') && account.type === 'SUPPORT' && !config.url) {
+            const latestMainPost = await prisma.twitterPost.findFirst({
+                where: {
+                    status: 'PUBLISHED',
+                    NOT: { postUrl: null },
+                    account: {
+                        userId: account.userId,
+                        type: 'MAIN',
+                        ...(account.groupId ? { groupId: account.groupId } : {}),
+                    },
+                },
+                orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+            });
+
+            if (!latestMainPost?.postUrl) {
+                return res.status(400).json({
+                    error: "Aucun post récent trouvé sur le compte principal de ce groupe. Poste d'abord avec le compte MAIN avant de lancer les commentaires des supports.",
+                });
+            }
+
+            config = { ...config, url: latestMainPost.postUrl };
+            console.log(`[Backend] Support ${account.username} targeting MAIN post ${latestMainPost.postUrl}`);
         }
 
         const job = await twitterQueue.add(action, { accountId: id, action, config, username: account.username });
@@ -1645,43 +1687,31 @@ io.on('connection', (socket) => {
                 });
 
                 if (supportAccounts.length > 0) {
-                    console.log(`🚀 Scheduling engagement for ${supportAccounts.length} support accounts...`);
-                    
+                    console.log(`🚀 Orchestration: kicking off ${supportAccounts.length} support accounts IMMEDIATELY on ${data.postUrl}`);
+
+                    const SUPPORT_COMMENTS_PER_POST = 10;
+
                     for (let i = 0; i < supportAccounts.length; i++) {
                         const support = supportAccounts[i];
-                        // Stagger engagement: 1-3 minutes random delay per account
-                        const delay = (1 + Math.random() * 2) * 60 * 1000;
-                        
-                        // Queue Auto-Like
+                        // Tiny per-account jitter (0-8s) so we don't launch N Playwright browsers in the exact same millisecond,
+                        // but still "immediate" from the user's point of view.
+                        const jitterMs = Math.floor(Math.random() * 8000);
+
+                        // ONE job per support account: directed autoComment now also likes the post
+                        // in the same browser session (avoids two concurrent Playwright sessions fighting
+                        // over the account's cookies in the DB).
                         await twitterQueue.add(
-                            `orchestration-like-${support.username}-${Date.now()}`,
+                            `orchestration-comment-${support.username}-${Date.now()}`,
                             {
                                 accountId: support.id,
-                                action: 'autoLike',
-                                config: { 
+                                action: 'autoComment',
+                                config: {
                                     url: data.postUrl,
-                                    count: 1 
+                                    count: SUPPORT_COMMENTS_PER_POST
                                 }
                             },
-                            { delay: Math.floor(delay), attempts: 2 }
+                            { delay: jitterMs, attempts: 2 }
                         );
-
-                        // Queue Auto-Comment (Guarantee 100% engagement)
-                        if (true) {
-                            await twitterQueue.add(
-                                `orchestration-comment-${support.username}-${Date.now()}`,
-                                {
-                                    accountId: support.id,
-                                    action: 'autoComment',
-                                    config: {
-                                        url: data.postUrl,
-                                        comments: [ "Great content! Keep it up 🔥" ], 
-                                        count: 1
-                                    }
-                                },
-                                { delay: Math.floor(delay + (2 * 60 * 1000)), attempts: 2 } // 2 min after like
-                            );
-                        }
                     }
                 }
             }
